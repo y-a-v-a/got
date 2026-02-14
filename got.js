@@ -31,6 +31,15 @@ if (existsSync(mePath)) {
 }
 const systemPrompt = promptParts.join('\n\n');
 
+// Debug: Log prompt loading info
+if (SHOULD_LOG) {
+  log('prompts_loaded', {
+    prompt_count: promptParts.length,
+    total_length: systemPrompt.length,
+    has_me: existsSync(mePath),
+  });
+}
+
 // ── Logging ─────────────────────────────────────────────────
 
 function log(type, data) {
@@ -169,14 +178,6 @@ const customTools = [
       required: ['command'],
     },
   },
-  {
-    name: 'get_location',
-    description: 'Get the user\'s approximate location via IP geolocation. Returns city, region, country, lat/lon, and timezone. Cached for 24h.',
-    input_schema: {
-      type: 'object',
-      properties: {},
-    },
-  },
 ];
 
 // ── Tool execution ──────────────────────────────────────────
@@ -188,9 +189,6 @@ async function executeTool(name, input) {
   switch (name) {
     case 'run_command':
       result = runCommand(input.command);
-      break;
-    case 'get_location':
-      result = JSON.stringify(await fetchLocation());
       break;
     default:
       result = `Unknown tool: ${name}`;
@@ -263,6 +261,7 @@ async function main() {
       max_tokens: MAX_TOKENS,
       message_count: messages.length,
       tools: tools.map(t => t.name || t.type),
+      system_prompt_length: systemPrompt.length,
     });
     
     response = await client.messages.create(apiRequest);
