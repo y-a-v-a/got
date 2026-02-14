@@ -332,11 +332,14 @@ async function main() {
   }
 
   // Extract and print text
-  const output = response.content
+  let output = response.content
     .filter(b => b.type === 'text')
     .map(b => b.text)
     .join('')
     .trim();
+
+  // Strip citation tags
+  output = output.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').trim();
 
   if (output) {
     console.log(output);

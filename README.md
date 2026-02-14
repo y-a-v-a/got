@@ -1,13 +1,16 @@
 # got
 
-A read-only CLI oracle. Ask it anything, it figures out the rest.
+A one-arm-bandit CLI. Feed it a topic, get a sharp response instantly.
 
-```
-got weather
-got status
-got pizza
-got "who painted guernica"
-got "am i in a git repo"
+Witty colleague energy. Current info when needed. Zero side effects.
+
+```bash
+got weather          # 2°C in Leiden, feels like -4. Bring layers.
+got shakespeare      # "All the world's a stage..." with commentary
+got APPL             # Stock price + snark
+got soul             # Blame it on the boogie.
+got status           # Git status or system health
+got trump            # Current news, maximum sarcasm
 ```
 
 ## Install
@@ -21,15 +24,22 @@ Requires `ANTHROPIC_API_KEY` in your environment.
 
 ## How it works
 
-`got` sends your query to Claude with three capabilities:
+`got` is your witty colleague with tools. It reads your query, decides what you
+actually want (info, wit, sarcasm, a quote), and responds accordingly.
 
-- **run_command** — executes read-only shell commands (allowlisted, filtered, no writes)
-- **get_location** — IP geolocation, cached for 24h in `~/.got/`
-- **web_search** — Anthropic's built-in web search
+**Tools available:**
+- **run_command** — read-only shell commands (git, ls, ps, etc.)
+- **web_search** — current info from the web
+- **Location** — cached IP geolocation for context
 
-The LLM decides which tools to use based on your query. "weather" triggers
-location + web search. "status" triggers git and system commands. "pizza"
-could go either way. That's the fun part.
+**Query interpretation:**
+- `got shakespeare` → delivers a quote with flair (no search needed)
+- `got weather` → current weather with personality
+- `got APPL` → stock price, probably with commentary
+- `got wit` → BE witty (not define wit)
+- `got status` → git status if you're in a repo, system health otherwise
+
+Personality first, information second. The response is always 2-3 lines max.
 
 ## Safety
 
@@ -39,8 +49,16 @@ curl, no chaining. Pipes between allowed commands are permitted.
 
 ## Personality
 
-- Edit `prompts/SOUL.md` to change who `got` is.
-- Edit `prompts/SYSTEM_PROMPT.md` to change what `got` does.
-- Edit `prompts/ME.md` to teach `got` about you. Optional — delete it and `got` just doesn't know you personally.
+`got` is a slightly sarcastic, witty colleague who knows a bit about everything.
+Not an assistant. Not a search engine. A person with opinions and access to tools.
+
+**Customize:**
+- `prompts/SOUL.md` — who `got` is (voice, wit, personality)
+- `prompts/SYSTEM_PROMPT.md` — how `got` interprets queries
+- `prompts/ME.md` — context about you (optional, delete if you want)
+
+**Philosophy:**
+Pull the lever, get a response. No ceremonies, no "let me help you", no walls
+of text. Just sharp, contextual answers with personality baked in.
 
 Vincent "got coffee" Bruijn <vebruijn@gmail.com>
