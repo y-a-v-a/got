@@ -1,0 +1,14 @@
+{
+  "name": "got-cli",
+  "version": "0.1.0",
+  "description": "A read-only CLI oracle powered by LLM",
+  "bin": {
+    "got": "./got.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
