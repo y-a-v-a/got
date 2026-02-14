@@ -21,15 +21,26 @@ const SHOULD_LOG = process.env.GOT_LOG === '1';
 // ── Load prompts ────────────────────────────────────────────
 
 const promptDir = join(__dirname, 'prompts');
-const promptParts = [
-  readFileSync(join(promptDir, 'SYSTEM_PROMPT.md'), 'utf-8'),
-  readFileSync(join(promptDir, 'SOUL.md'), 'utf-8'),
-];
+const promptParts = [];
+
+promptParts.push('<system_instructions>');
+promptParts.push(readFileSync(join(promptDir, 'SYSTEM_PROMPT.md'), 'utf-8'));
+promptParts.push('</system_instructions>');
+
+promptParts.push('<personality>');
+promptParts.push(readFileSync(join(promptDir, 'SOUL.md'), 'utf-8'));
+promptParts.push('</personality>');
+
 const mePath = join(promptDir, 'ME.md');
 if (existsSync(mePath)) {
   const me = readFileSync(mePath, 'utf-8').trim();
-  if (me) promptParts.push(`# About the person you work with\n\n${me}`);
+  if (me) {
+    promptParts.push('<user_context>');
+    promptParts.push(me);
+    promptParts.push('</user_context>');
+  }
 }
+
 const systemPrompt = promptParts.join('\n\n');
 
 // Debug: Log prompt loading info
