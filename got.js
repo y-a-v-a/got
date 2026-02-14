@@ -332,9 +332,11 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
   // Ensure location cache is populated for web search hints
   await fetchLocation();
   
-  // Hint the LLM that functional queries want data, not personality
+  // Functional queries get a data-first hint, everything else gets attitude
   if (isFunctionalQuery(query)) {
     query = `[system query] ${query}`;
+  } else {
+    query = `Be creative, your ironic or sarcastic take on: ${query}`;
   }
   
   const tools = [buildWebSearchTool(), ...customTools];
