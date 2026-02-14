@@ -2,7 +2,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { execSync } = require('child_process');
-const { readFileSync, writeFileSync, mkdirSync, existsSync } = require('fs');
+const { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } = require('fs');
 const { join } = require('path');
 const { homedir } = require('os');
 
@@ -14,6 +14,8 @@ const CMD_TIMEOUT = 5000;
 const CACHE_DIR = join(homedir(), '.got');
 const LOCATION_CACHE = join(CACHE_DIR, 'location.json');
 const LOCATION_TTL = 24 * 60 * 60 * 1000;
+const LOG_FILE = join(CACHE_DIR, 'got.log');
+const SHOULD_LOG = process.env.GOT_LOG === '1';
 
 // ── Load prompts ────────────────────────────────────────────
 
@@ -28,6 +30,20 @@ if (existsSync(mePath)) {
   if (me) promptParts.push(`# About the person you work with\n\n${me}`);
 }
 const systemPrompt = promptParts.join('\n\n');
+
+// ── Logging ─────────────────────────────────────────────────
+
+function log(type, data) {
+  if (!SHOULD_LOG) return;
+  mkdirSync(CACHE_DIR, { recursive: true });
+  const timestamp = new Date().toISOString();
+  const entry = {
+    timestamp,
+    type,
+    data,
+  };
+  appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
+}
 
 // ── Command safety ──────────────────────────────────────────
 
@@ -166,14 +182,22 @@ const customTools = [
 // ── Tool execution ──────────────────────────────────────────
 
 async function executeTool(name, input) {
+  log('tool_execution', { tool: name, input });
+  
+  let result;
   switch (name) {
     case 'run_command':
-      return runCommand(input.command);
+      result = runCommand(input.command);
+      break;
     case 'get_location':
-      return JSON.stringify(await fetchLocation());
+      result = JSON.stringify(await fetchLocation());
+      break;
     default:
-      return `Unknown tool: ${name}`;
+      result = `Unknown tool: ${name}`;
   }
+  
+  log('tool_result', { tool: name, result: result.slice(0, 500) });
+  return result;
 }
 
 // ── Build web search tool config ────────────────────────────
@@ -225,12 +249,29 @@ async function main() {
   const MAX_ITERATIONS = 10;
 
   while (iterations++ < MAX_ITERATIONS) {
-    response = await client.messages.create({
+    const apiRequest = {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: systemPrompt,
       tools,
       messages,
+    };
+    
+    log('api_request', {
+      iteration: iterations,
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      message_count: messages.length,
+      tools: tools.map(t => t.name || t.type),
+    });
+    
+    response = await client.messages.create(apiRequest);
+    
+    log('api_response', {
+      iteration: iterations,
+      stop_reason: response.stop_reason,
+      usage: response.usage,
+      content_types: response.content.map(b => b.type),
     });
 
     // Only loop if the model wants us to execute custom tools
