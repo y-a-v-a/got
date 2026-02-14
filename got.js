@@ -273,14 +273,14 @@ function buildWebSearchTool() {
 const FUNCTIONAL_QUERIES = new Set([
   // System info
   'memory', 'ram', 'disk', 'diskspace', 'storage', 'battery', 'cpu', 'load',
-  'uptime', 'processes', 'top', 'network', 'wifi', 'ip', 'ports',
+  'uptime', 'processes', 'network', 'wifi', 'ip', 'ports',
   // Git
   'status', 'branches', 'branch', 'commits', 'log', 'diff', 'stash',
   // File system
   'pwd', 'cwd', 'ls', 'files', 'tree', 'here',
   // Dev environment
   'node', 'npm', 'python', 'ruby', 'java', 'go', 'rust', 'cargo',
-  'versions', 'env', 'path',
+  'versions', 'path',
   // Other utilities
   'date', 'time', 'timezone', 'locale', 'whoami', 'hostname',
 ]);
@@ -309,7 +309,7 @@ WITTY MODE (default — personality first):
 
 SWISS ARMY KNIFE MODE (functional — straight facts):
   System:   memory, ram, disk, diskspace, storage, battery, cpu, load,
-            uptime, processes, top, network, wifi, ip, ports
+            uptime, processes, network, wifi, ip, ports
   Git:      status, branches, branch, commits, log, diff, stash
   Files:    pwd, cwd, ls, files, tree, here
   Dev:      node, npm, python, ruby, java, go, rust, cargo, versions
@@ -328,6 +328,9 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
 
   const client = new Anthropic();
   const model = selectModel(query);
+  
+  // Ensure location cache is populated for web search hints
+  await fetchLocation();
   
   // Apply sarcastic wrapper only for non-functional queries
   const originalQuery = query;
