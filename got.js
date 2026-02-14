@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+'use strict';
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { execSync } = require('child_process');
@@ -17,6 +18,20 @@ const LOCATION_CACHE = join(CACHE_DIR, 'location.json');
 const LOCATION_TTL = 24 * 60 * 60 * 1000;
 const LOG_FILE = join(CACHE_DIR, 'got.log');
 const SHOULD_LOG = process.env.GOT_LOG === '1';
+
+// ── Logging ─────────────────────────────────────────────────
+
+function log(type, data) {
+  if (!SHOULD_LOG) return;
+  mkdirSync(CACHE_DIR, { recursive: true });
+  const timestamp = new Date().toISOString();
+  const entry = {
+    timestamp,
+    type,
+    data,
+  };
+  appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
+}
 
 // ── Load prompts ────────────────────────────────────────────
 
@@ -43,28 +58,11 @@ if (existsSync(mePath)) {
 
 const systemPrompt = promptParts.join('\n\n');
 
-// Debug: Log prompt loading info
-if (SHOULD_LOG) {
-  log('prompts_loaded', {
-    prompt_count: promptParts.length,
-    total_length: systemPrompt.length,
-    has_me: existsSync(mePath),
-  });
-}
-
-// ── Logging ─────────────────────────────────────────────────
-
-function log(type, data) {
-  if (!SHOULD_LOG) return;
-  mkdirSync(CACHE_DIR, { recursive: true });
-  const timestamp = new Date().toISOString();
-  const entry = {
-    timestamp,
-    type,
-    data,
-  };
-  appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
-}
+log('prompts_loaded', {
+  prompt_count: promptParts.length,
+  total_length: systemPrompt.length,
+  has_me: existsSync(mePath),
+});
 
 // ── Command safety ──────────────────────────────────────────
 
@@ -75,16 +73,16 @@ const ALLOWED_COMMANDS = new Set([
   // files (read-only)
   'ls', 'cat', 'head', 'tail', 'find', 'file', 'wc', 'stat',
   'du', 'df', 'tree', 'realpath', 'basename', 'dirname',
-  // processes
-  'ps', 'pgrep', 'lsof', 'vm_stat', 'free', 'top',
+  // processes (top excluded — runs interactively, use ps instead)
+  'ps', 'pgrep', 'lsof', 'vm_stat', 'free',
   // network (read-only)
   'ping', 'dig', 'nslookup', 'ifconfig', 'ip', 'host', 'networksetup',
   // git (all subcommands are read-safe enough given no shell writes)
   'git',
   // text processing
-  'grep', 'awk', 'sed', 'sort', 'uniq', 'cut', 'tr', 'jq', 'xargs',
+  'grep', 'awk', 'sed', 'sort', 'uniq', 'cut', 'tr', 'jq',
   // introspection
-  'which', 'type', 'echo', 'printenv', 'env', 'locale', 'pwd',
+  'which', 'type', 'echo', 'locale', 'pwd',
   // language version checks
   'node', 'npm', 'python', 'python3', 'ruby', 'java', 'rustc', 'cargo',
 ]);
@@ -111,6 +109,10 @@ const BLOCKED_PATTERNS = [
   /\bshutdown\b/,
   /\bcurl\b/,          // no arbitrary HTTP — use web_search
   /\bwget\b/,
+  /\bsed\s.*-i/,       // sed inline edit is a write
+  /\bgit\s+(push|commit|reset|clean|checkout\s+-f|rebase|merge|stash\s+drop)\b/,
+  /\b(node|python|python3|ruby)\s+(-e\b|-c\b)/,  // no eval via interpreters
+  /[\n\r]/,             // no newline injection
 ];
 
 function validateCommand(cmd) {
