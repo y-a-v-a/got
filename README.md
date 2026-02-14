@@ -5,12 +5,18 @@ A one-arm-bandit CLI. Feed it a topic, get a sharp response instantly.
 Witty colleague energy. Current info when needed. Zero side effects.
 
 ```bash
+# Witty mode (default)
 got weather          # 2°C in Leiden, feels like -4. Bring layers.
 got shakespeare      # "All the world's a stage..." with commentary
-got APPL             # Stock price + snark
 got soul             # Blame it on the boogie.
-got status           # Git status or system health
 got trump            # Current news, maximum sarcasm
+
+# Swiss army knife mode (functional, no jokes)
+got memory           # RAM usage
+got battery          # Battery status
+got disk             # Disk space
+got status           # Git status or system health
+got branches         # Git branches
 ```
 
 ## Install
@@ -35,11 +41,13 @@ actually want (info, wit, sarcasm, a quote), and responds accordingly.
 **Query interpretation:**
 - `got shakespeare` → delivers a quote with flair (no search needed)
 - `got weather` → current weather with personality
-- `got APPL` → stock price, probably with commentary
 - `got wit` → BE witty (not define wit)
+- `got memory` → RAM usage (functional mode, no jokes)
 - `got status` → git status if you're in a repo, system health otherwise
 
-Personality first, information second. The response is always 2-3 lines max.
+**Swiss army knife mode:** System queries like `memory`, `disk`, `battery`, `cpu`, `branches` skip the sarcasm and give you straight facts. Everything else gets personality.
+
+Response is always 2-3 lines max.
 
 ## Safety
 

@@ -138,10 +138,17 @@ function runCommand(cmd) {
       encoding: 'utf-8',
       maxBuffer: 64 * 1024,
       cwd: process.cwd(),
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     return output.trim().slice(0, 4000); // cap output for token sanity
   } catch (e) {
-    return (e.stderr || e.message || 'Command failed').trim().slice(0, 1000);
+    const stderr = (e.stderr || e.message || 'Command failed').toString().trim();
+    log('command_error', { cmd, stderr });
+    // Return empty string if command not found, otherwise return the error
+    if (stderr.includes('command not found') || stderr.includes('illegal option')) {
+      return '';
+    }
+    return stderr.slice(0, 1000);
   }
 }
 
@@ -259,13 +266,56 @@ function buildWebSearchTool() {
   return tool;
 }
 
+// ── Functional query whitelist (swiss army knife mode) ─────
+
+const FUNCTIONAL_QUERIES = new Set([
+  // System info
+  'memory', 'ram', 'disk', 'diskspace', 'storage', 'battery', 'cpu', 'load',
+  'uptime', 'processes', 'top', 'network', 'wifi', 'ip', 'ports',
+  // Git
+  'status', 'branches', 'branch', 'commits', 'log', 'diff', 'stash',
+  // File system
+  'pwd', 'cwd', 'ls', 'files', 'tree', 'here',
+  // Dev environment
+  'node', 'npm', 'python', 'ruby', 'java', 'go', 'rust', 'cargo',
+  'versions', 'env', 'path',
+  // Other utilities
+  'date', 'time', 'timezone', 'locale', 'whoami', 'hostname',
+]);
+
+function isFunctionalQuery(query) {
+  const q = query.toLowerCase().trim();
+  return FUNCTIONAL_QUERIES.has(q) || q.startsWith('git ') || q === 'git';
+}
+
 // ── Main ────────────────────────────────────────────────────
 
 async function main() {
-  const query = process.argv.slice(2).join(' ');
-  if (!query) {
-    console.log('Usage: got <anything>');
-    console.log('Examples: got weather, got status, got pizza, got "meaning of life"');
+  let query = process.argv.slice(2).join(' ');
+  
+  if (!query || query === 'help' || query === '--help' || query === '-h') {
+    console.log(`got — one-arm-bandit CLI with personality
+
+Usage: got <query>
+
+WITTY MODE (default — personality first):
+  got shakespeare      Shakespeare quote with commentary
+  got soul             Witty response ("Blame it on the boogie")
+  got trump            Current news with maximum sarcasm
+  got weather          Local weather with personality
+  got wit              BE witty (not define wit)
+
+SWISS ARMY KNIFE MODE (functional — straight facts):
+  System:   memory, ram, disk, diskspace, storage, battery, cpu, load,
+            uptime, processes, top, network, wifi, ip, ports
+  Git:      status, branches, branch, commits, log, diff, stash
+  Files:    pwd, cwd, ls, files, tree, here
+  Dev:      node, npm, python, ruby, java, go, rust, cargo, versions
+  Other:    date, time, timezone, locale, whoami, hostname
+
+Set ANTHROPIC_API_KEY in your environment.
+Set GOT_LOG=1 to enable logging to ~/.got/got.log
+`);
     process.exit(0);
   }
 
@@ -276,6 +326,13 @@ async function main() {
 
   const client = new Anthropic();
   const model = selectModel(query);
+  
+  // Apply sarcastic wrapper only for non-functional queries
+  const originalQuery = query;
+  if (!isFunctionalQuery(query)) {
+    query = `Anything on "${query}", with an ironic or sarcastic twist`;
+  }
+  
   const tools = [buildWebSearchTool(), ...customTools];
   const messages = [{ role: 'user', content: query }];
 

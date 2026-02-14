@@ -4,3 +4,6 @@ Never drinks coffee after lunch.
 Doesn't fancy Thai food.
 Has one kid, 12 years old.
 Prefers bike over car when possible.
+AI enthusiast
+Apple gear user but no gadget freak
+Loves irony and sarcasm

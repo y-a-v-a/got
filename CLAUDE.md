@@ -4,9 +4,13 @@
 
 A one-arm-bandit CLI powered by Claude. Feed it a topic, get a sharp response instantly.
 
-**Core characteristic:** Personality-first responses. Not a search wrapper, not a command runner — a witty colleague with tools. You pull the lever (`got shakespeare`), you get a quote with commentary. You ask `got APPL`, you get stock price with snark. Always 2-3 lines max.
+**Core characteristic:** Personality-first responses with a swiss army knife mode. Not a search wrapper, not a command runner — a witty colleague with tools who knows when to be functional.
 
-Users throw queries at it (`got weather`, `got soul`, `got trump`) and the LLM interprets intent — sometimes it needs tools (web search, shell commands), sometimes it just responds with wit or knowledge.
+**Two modes:**
+1. **Witty mode** (default): `got shakespeare` → quote with commentary, `got trump` → news with snark
+2. **Swiss army knife mode**: `got memory` → RAM usage (no jokes), `got battery` → battery status (straight facts)
+
+The query is wrapped with "with an ironic or sarcastic twist" UNLESS it matches the functional query whitelist (see `FUNCTIONAL_QUERIES` in got.js). This gives you both: a sarcastic colleague for general queries, and a fast utility tool for system info.
 
 ## Core Architecture
 
@@ -58,19 +62,27 @@ Commands are validated through:
 
 ## Testing
 
-Run `npm link` to install locally, then test with:
+Run `npm link` to install locally, then test both modes:
+
 ```bash
-got weather          # Should get location + weather with personality
-got shakespeare      # Should deliver a quote, not web search
-got soul             # Should respond with wit, not info about soul music
-got APPL             # Should get current stock price
-got status           # Should run git status or system health
-got trump            # Should get current info with appropriate snark
+# Witty mode (should have personality)
+got weather          # Location + weather with personality
+got shakespeare      # Quote without web search, with commentary
+got soul             # Witty response, not info about soul music
+got trump            # Current info with snark
+
+# Swiss army knife mode (should be functional, no jokes)
+got memory           # RAM usage, straight facts
+got battery          # Battery status, no commentary
+got disk             # Disk space, just the numbers
+got status           # Git status or system health
+got branches         # Git branches, plain list
 ```
 
 **Expected behavior:**
 - Responses are 2-3 lines maximum
-- Personality is present (wit, snark, or dry observation)
+- Witty mode: personality present (wit, snark, or dry observation)
+- Swiss army knife mode: straight facts, no jokes
 - No preamble ("Here's what I found"), just the answer
 - No markdown, citations, or markup in output
 
