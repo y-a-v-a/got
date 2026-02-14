@@ -8,7 +8,8 @@ const { homedir } = require('os');
 
 // ── Config ──────────────────────────────────────────────────
 
-const MODEL = 'claude-sonnet-4-20250514';
+const MODEL_SONNET = 'claude-sonnet-4-5-20250929';
+const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 1024;
 const CMD_TIMEOUT = 5000;
 const CACHE_DIR = join(homedir(), '.got');
@@ -198,6 +199,31 @@ async function executeTool(name, input) {
   return result;
 }
 
+// ── Model selection ─────────────────────────────────────────
+
+function selectModel(query) {
+  const q = query.toLowerCase();
+  
+  // Simple patterns that Haiku handles well
+  const simplePatterns = [
+    /^(what is|what's|whats) \d+[\s\+\-\*\/]+\d+/,  // math
+    /^(ls|pwd|date|uptime|whoami|hostname|df|du)\b/, // simple commands
+    /^(weather|time|temperature)\b/,                  // basic info
+    /^what (is|are) .{1,20}$/,                       // short questions
+    /^(hi|hello|hey)\b/,                             // greetings
+  ];
+  
+  // Use Haiku for simple queries
+  if (simplePatterns.some(p => p.test(q))) {
+    log('model_selection', { model: 'haiku', query: q.slice(0, 50) });
+    return MODEL_HAIKU;
+  }
+  
+  // Use Sonnet for complex queries
+  log('model_selection', { model: 'sonnet', query: q.slice(0, 50) });
+  return MODEL_SONNET;
+}
+
 // ── Build web search tool config ────────────────────────────
 
 function buildWebSearchTool() {
@@ -238,6 +264,7 @@ async function main() {
   }
 
   const client = new Anthropic();
+  const model = selectModel(query);
   const tools = [buildWebSearchTool(), ...customTools];
   const messages = [{ role: 'user', content: query }];
 
@@ -248,7 +275,7 @@ async function main() {
 
   while (iterations++ < MAX_ITERATIONS) {
     const apiRequest = {
-      model: MODEL,
+      model: model,
       max_tokens: MAX_TOKENS,
       system: systemPrompt,
       tools,
@@ -257,7 +284,7 @@ async function main() {
     
     log('api_request', {
       iteration: iterations,
-      model: MODEL,
+      model: model,
       max_tokens: MAX_TOKENS,
       message_count: messages.length,
       tools: tools.map(t => t.name || t.type),
