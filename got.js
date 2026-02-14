@@ -219,6 +219,28 @@ async function executeTool(name, input) {
   return result;
 }
 
+// ── Functional query whitelist (swiss army knife mode) ─────
+
+const FUNCTIONAL_QUERIES = new Set([
+  // System info
+  'memory', 'ram', 'disk', 'diskspace', 'storage', 'battery', 'cpu', 'load',
+  'uptime', 'processes', 'network', 'wifi', 'ip', 'ports',
+  // Git
+  'status', 'branches', 'branch', 'commits', 'log', 'diff', 'stash',
+  // File system
+  'pwd', 'cwd', 'ls', 'files', 'tree', 'here',
+  // Dev environment
+  'node', 'npm', 'python', 'ruby', 'java', 'go', 'rust', 'cargo',
+  'versions', 'path',
+  // Other utilities
+  'date', 'time', 'timezone', 'locale', 'whoami', 'hostname',
+]);
+
+function isFunctionalQuery(query) {
+  const q = query.toLowerCase().trim();
+  return FUNCTIONAL_QUERIES.has(q) || q.startsWith('git ') || q === 'git';
+}
+
 // ── Model selection ─────────────────────────────────────────
 
 function selectModel(query) {
@@ -233,8 +255,8 @@ function selectModel(query) {
     /^(hi|hello|hey)\b/,                             // greetings
   ];
   
-  // Use Haiku for simple queries
-  if (simplePatterns.some(p => p.test(q))) {
+  // Use Haiku for simple/functional queries
+  if (isFunctionalQuery(query) || simplePatterns.some(p => p.test(q))) {
     log('model_selection', { model: 'haiku', query: q.slice(0, 50) });
     return MODEL_HAIKU;
   }
@@ -266,28 +288,6 @@ function buildWebSearchTool() {
   }
 
   return tool;
-}
-
-// ── Functional query whitelist (swiss army knife mode) ─────
-
-const FUNCTIONAL_QUERIES = new Set([
-  // System info
-  'memory', 'ram', 'disk', 'diskspace', 'storage', 'battery', 'cpu', 'load',
-  'uptime', 'processes', 'network', 'wifi', 'ip', 'ports',
-  // Git
-  'status', 'branches', 'branch', 'commits', 'log', 'diff', 'stash',
-  // File system
-  'pwd', 'cwd', 'ls', 'files', 'tree', 'here',
-  // Dev environment
-  'node', 'npm', 'python', 'ruby', 'java', 'go', 'rust', 'cargo',
-  'versions', 'path',
-  // Other utilities
-  'date', 'time', 'timezone', 'locale', 'whoami', 'hostname',
-]);
-
-function isFunctionalQuery(query) {
-  const q = query.toLowerCase().trim();
-  return FUNCTIONAL_QUERIES.has(q) || q.startsWith('git ') || q === 'git';
 }
 
 // ── Main ────────────────────────────────────────────────────
@@ -332,10 +332,9 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
   // Ensure location cache is populated for web search hints
   await fetchLocation();
   
-  // Apply sarcastic wrapper only for non-functional queries
-  const originalQuery = query;
-  if (!isFunctionalQuery(query)) {
-    query = `Anything on "${query}", with an ironic or sarcastic twist`;
+  // Hint the LLM that functional queries want data, not personality
+  if (isFunctionalQuery(query)) {
+    query = `[system query] ${query}`;
   }
   
   const tools = [buildWebSearchTool(), ...customTools];
