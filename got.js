@@ -8,7 +8,7 @@ const { homedir } = require('os');
 
 // ── Config ──────────────────────────────────────────────────
 
-const MODEL = 'claude-sonnet-4-5-20250514';
+const MODEL = 'claude-sonnet-4-20250514';
 const MAX_TOKENS = 1024;
 const CMD_TIMEOUT = 5000;
 const CACHE_DIR = join(homedir(), '.got');
@@ -124,7 +124,7 @@ async function fetchLocation() {
   if (cached) return cached;
 
   try {
-    const res = await fetch('http://ip-api.com/json/?fields=city,regionName,country,lat,lon,timezone');
+    const res = await fetch('http://ip-api.com/json/?fields=city,regionName,country,countryCode,lat,lon,timezone');
     const data = await res.json();
     mkdirSync(CACHE_DIR, { recursive: true });
     writeFileSync(LOCATION_CACHE, JSON.stringify({ timestamp: Date.now(), data }));
@@ -192,7 +192,7 @@ function buildWebSearchTool() {
       type: 'approximate',
       city: loc.city,
       region: loc.regionName,
-      country: loc.country,
+      country: loc.countryCode,
       timezone: loc.timezone,
     };
   }
