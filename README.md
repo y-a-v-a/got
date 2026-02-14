@@ -39,6 +39,8 @@ curl, no chaining. Pipes between allowed commands are permitted.
 
 ## Personality
 
-Edit `prompts/SOUL.md` to change who `got` is.
-Edit `prompts/SYSTEM_PROMPT.md` to change what `got` does.
-Edit `prompts/ME.md` to teach `got` about you. Optional — delete it and `got` just doesn't know you personally.
+- Edit `prompts/SOUL.md` to change who `got` is.
+- Edit `prompts/SYSTEM_PROMPT.md` to change what `got` does.
+- Edit `prompts/ME.md` to teach `got` about you. Optional — delete it and `got` just doesn't know you personally.
+
+Vincent "got coffee" Bruijn <vebruijn@gmail.com>
