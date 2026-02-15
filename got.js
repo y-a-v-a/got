@@ -336,7 +336,7 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
   if (isFunctionalQuery(query)) {
     query = `[system query] ${query}`;
   } else {
-    query = `Be creative, your ironic or sarcastic take on: ${query}`;
+    query = `got ${query} — hit me`;
   }
   
   const tools = [buildWebSearchTool(), ...customTools];
