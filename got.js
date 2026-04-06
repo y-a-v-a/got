@@ -7,6 +7,7 @@ const { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } = r
 const { join } = require('path');
 const { homedir } = require('os');
 const readline = require('readline');
+const { createHash } = require('crypto');
 
 // ── Config ──────────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ const CMD_TIMEOUT = 5000;
 const CACHE_DIR = join(homedir(), '.got');
 const LOCATION_CACHE = join(CACHE_DIR, 'location.json');
 const LOCATION_TTL = 24 * 60 * 60 * 1000;
+const PROJECT_CACHE_TTL = 5 * 60 * 1000;
 const LOG_FILE = join(CACHE_DIR, 'got.log');
 const SHOULD_LOG = process.env.GOT_LOG === '1';
 
@@ -57,11 +59,11 @@ if (existsSync(mePath)) {
   }
 }
 
-const systemPrompt = promptParts.join('\n\n');
+const baseSystemPrompt = promptParts.join('\n\n');
 
 log('prompts_loaded', {
   prompt_count: promptParts.length,
-  total_length: systemPrompt.length,
+  total_length: baseSystemPrompt.length,
   has_me: existsSync(mePath),
 });
 
@@ -291,6 +293,110 @@ function buildWebSearchTool() {
   return tool;
 }
 
+// ── Project context ──────────────────────────────────────────
+
+function gatherProjectContext() {
+  const cwd = process.cwd();
+  const hash = createHash('md5').update(cwd).digest('hex').slice(0, 8);
+  const cacheFile = `/tmp/got-project-${hash}.json`;
+
+  if (existsSync(cacheFile)) {
+    try {
+      const cached = JSON.parse(readFileSync(cacheFile, 'utf-8'));
+      if (Date.now() - cached.timestamp < PROJECT_CACHE_TTL) return cached.context;
+    } catch {}
+  }
+
+  const lines = [];
+  const opts = { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 3000 };
+
+  // Determine project root (git root if available, else cwd)
+  let projectRoot = cwd;
+  try { projectRoot = execSync('git rev-parse --show-toplevel', opts).trim(); } catch {}
+
+  // Git: branch, recent commits, dirty state
+  try {
+    const branch = execSync('git branch --show-current', opts).trim();
+    if (branch) lines.push(`Branch: ${branch}`);
+  } catch {}
+  try {
+    const gitLog = execSync('git log --oneline -5', opts).trim();
+    if (gitLog) lines.push(`Recent commits:\n${gitLog}`);
+  } catch {}
+  try {
+    const dirty = execSync('git status --short', opts).trim();
+    if (dirty) lines.push(`Uncommitted:\n${dirty}`);
+  } catch {}
+
+  // Project manifest — first match wins, prepended so it leads the context
+  const manifests = [
+    ['package.json', (c) => {
+      const p = JSON.parse(c);
+      return [p.name && `${p.name} (Node.js)`, p.description].filter(Boolean).join(' — ');
+    }],
+    ['Cargo.toml', (c) => {
+      const name = c.match(/^name\s*=\s*"([^"]+)"/m)?.[1];
+      const desc = c.match(/^description\s*=\s*"([^"]+)"/m)?.[1];
+      return [name && `${name} (Rust)`, desc].filter(Boolean).join(' — ');
+    }],
+    ['pyproject.toml', (c) => {
+      const name = c.match(/^name\s*=\s*["']([^"']+)["']/m)?.[1];
+      const desc = c.match(/^description\s*=\s*["']([^"']+)["']/m)?.[1];
+      return [name && `${name} (Python)`, desc].filter(Boolean).join(' — ');
+    }],
+    ['setup.cfg', (c) => {
+      const name = c.match(/^name\s*=\s*(.+)/m)?.[1]?.trim();
+      const desc = c.match(/^description\s*=\s*(.+)/m)?.[1]?.trim();
+      return [name && `${name} (Python)`, desc].filter(Boolean).join(' — ');
+    }],
+    ['go.mod', (c) => {
+      const mod = c.match(/^module\s+(\S+)/m)?.[1];
+      return mod ? `${mod} (Go)` : '';
+    }],
+    ['composer.json', (c) => {
+      const p = JSON.parse(c);
+      return [p.name && `${p.name} (PHP)`, p.description].filter(Boolean).join(' — ');
+    }],
+    ['pubspec.yaml', (c) => {
+      const name = c.match(/^name:\s*(.+)/m)?.[1]?.trim();
+      const desc = c.match(/^description:\s*(.+)/m)?.[1]?.trim();
+      return [name && `${name} (Dart/Flutter)`, desc].filter(Boolean).join(' — ');
+    }],
+  ];
+
+  for (const [file, parse] of manifests) {
+    if (existsSync(join(projectRoot, file))) {
+      try {
+        const result = parse(readFileSync(join(projectRoot, file), 'utf-8'));
+        if (result) { lines.unshift(`Project: ${result}`); break; }
+      } catch {}
+    }
+  }
+
+  // README: first 3 non-empty lines, max 300 chars
+  for (const name of ['README.md', 'README.rst', 'README.txt', 'README']) {
+    if (existsSync(join(projectRoot, name))) {
+      try {
+        const preview = readFileSync(join(projectRoot, name), 'utf-8')
+          .split('\n')
+          .map(l => l.replace(/^[#*\s]+/, '').trim())
+          .filter(Boolean)
+          .slice(0, 3)
+          .join(' ')
+          .slice(0, 300);
+        if (preview) lines.push(`README: ${preview}`);
+      } catch {}
+      break;
+    }
+  }
+
+  const context = lines.length ? lines.join('\n') : null;
+  log('project_context', { cwd, lines: lines.length });
+
+  try { writeFileSync(cacheFile, JSON.stringify({ timestamp: Date.now(), context })); } catch {}
+  return context;
+}
+
 // ── Stdin ────────────────────────────────────────────────────
 
 function readStdin() {
@@ -308,7 +414,7 @@ function readStdin() {
 
 // Runs one formatted query through the tool-use loop.
 // history: shared array for REPL context (clean turns only). Pass [] for one-shot.
-async function runQuery(formattedMessage, history, client, model, tools) {
+async function runQuery(formattedMessage, history, client, model, tools, systemPrompt) {
   // Working messages = shared history + this turn's user message
   const messages = [...history, { role: 'user', content: formattedMessage }];
 
@@ -370,7 +476,7 @@ async function runQuery(formattedMessage, history, client, model, tools) {
 
 // ── REPL ────────────────────────────────────────────────────
 
-async function startRepl(client, tools) {
+async function startRepl(client, tools, systemPrompt) {
   const history = [];
 
   console.log('got repl — quit or ctrl+d to exit\n');
@@ -396,7 +502,7 @@ async function startRepl(client, tools) {
       : `got ${input} — hit me`;
 
     try {
-      const output = await runQuery(query, history, client, MODEL_SONNET, tools);
+      const output = await runQuery(query, history, client, MODEL_SONNET, tools, systemPrompt);
       if (output) console.log('\n' + output + '\n');
     } catch (e) {
       if (e.status === 429) {
@@ -467,8 +573,13 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
   await fetchLocation();
   const tools = [buildWebSearchTool(), ...customTools];
 
+  const projectContext = gatherProjectContext();
+  const systemPrompt = projectContext
+    ? `${baseSystemPrompt}\n\n<project_context>\n${projectContext}\n</project_context>`
+    : baseSystemPrompt;
+
   if (query === 'repl') {
-    await startRepl(client, tools);
+    await startRepl(client, tools, systemPrompt);
     return;
   }
 
@@ -485,7 +596,7 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
     query = `got ${query} — hit me`;
   }
 
-  const output = await runQuery(query, [], client, model, tools);
+  const output = await runQuery(query, [], client, model, tools, systemPrompt);
   if (output) console.log(output);
 }
 
