@@ -17,6 +17,11 @@ got battery          # Battery status
 got disk             # Disk space
 got status           # Git status or system health
 got branches         # Git branches
+
+# Pipe mode (pipe anything as context)
+git diff | got                          # what changed, briefly
+npm test 2>&1 | got what broke          # pinpoint the failure
+cat error.log | got anything alarming   # scan with attitude
 ```
 
 ## Install
@@ -46,6 +51,14 @@ actually want (info, wit, sarcasm, a quote), and responds accordingly.
 - `got status` → git status if you're in a repo, system health otherwise
 
 **Swiss army knife mode:** System queries like `memory`, `disk`, `battery`, `cpu`, `branches` skip the sarcasm and give you straight facts. Everything else gets personality.
+
+**Pipe mode:** Pipe any content into `got` as context. Ask a question or leave it
+blank — it figures out the most useful thing to say. Input is capped at 4KB.
+```bash
+git diff | got
+npm test 2>&1 | got what broke
+cat package.json | got anything weird
+```
 
 Response is always 2-3 lines max.
 

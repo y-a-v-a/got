@@ -290,15 +290,34 @@ function buildWebSearchTool() {
   return tool;
 }
 
+// ── Stdin ────────────────────────────────────────────────────
+
+function readStdin() {
+  if (process.stdin.isTTY) return Promise.resolve('');
+  return new Promise((resolve) => {
+    let data = '';
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', chunk => { data += chunk; });
+    process.stdin.on('end', () => resolve(data.trim().slice(0, 4000)));
+    process.stdin.on('error', () => resolve(''));
+  });
+}
+
 // ── Main ────────────────────────────────────────────────────
 
 async function main() {
-  let query = process.argv.slice(2).join(' ');
-  
-  if (!query || query === 'help' || query === '--help' || query === '-h') {
+  const [stdinContent, rawArgs] = await Promise.all([
+    readStdin(),
+    Promise.resolve(process.argv.slice(2).join(' ')),
+  ]);
+
+  let query = rawArgs;
+
+  if (!query && !stdinContent || query === 'help' || query === '--help' || query === '-h') {
     console.log(`got — one-arm-bandit CLI with personality
 
 Usage: got <query>
+       <command> | got [question]
 
 WITTY MODE (default — personality first):
   got shakespeare      Shakespeare quote with commentary
@@ -315,6 +334,11 @@ SWISS ARMY KNIFE MODE (functional — straight facts):
   Dev:      node, npm, python, ruby, java, go, rust, cargo, versions
   Other:    date, time, timezone, locale, whoami, hostname
 
+PIPE MODE (pipe content as context):
+  npm test 2>&1 | got what broke
+  git diff | got
+  cat error.log | got explain this
+
 Set ANTHROPIC_API_KEY in your environment.
 Set GOT_LOG=1 to enable logging to ~/.got/got.log
 `);
@@ -327,13 +351,18 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
   }
 
   const client = new Anthropic();
-  const model = selectModel(query);
-  
+  const model = stdinContent ? MODEL_SONNET : selectModel(query);
+
   // Ensure location cache is populated for web search hints
   await fetchLocation();
-  
-  // Functional queries get a data-first hint, everything else gets attitude
-  if (isFunctionalQuery(query)) {
+
+  // Build the final query, injecting piped content when present
+  if (stdinContent) {
+    const question = query || 'what is this?';
+    const tag = isFunctionalQuery(question) ? '[system query]' : '[piped input]';
+    query = `${tag} ${question}\n\n<stdin>\n${stdinContent}\n</stdin>`;
+  } else if (isFunctionalQuery(query)) {
+    // Functional queries get a data-first hint, everything else gets attitude
     query = `[system query] ${query}`;
   } else {
     query = `got ${query} — hit me`;
