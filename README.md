@@ -22,6 +22,9 @@ got branches         # Git branches
 git diff | got                          # what changed, briefly
 npm test 2>&1 | got what broke          # pinpoint the failure
 cat error.log | got anything alarming   # scan with attitude
+
+# REPL mode (persistent session with memory)
+got repl
 ```
 
 ## Install
@@ -59,6 +62,11 @@ git diff | got
 npm test 2>&1 | got what broke
 cat package.json | got anything weird
 ```
+
+**REPL mode:** `got repl` starts a persistent session. Conversation history is kept
+in memory across turns so it can reference what was just said. Same two modes apply
+(functional queries get straight facts, everything else gets personality). `quit` or
+ctrl+d to exit.
 
 Response is always 2-3 lines max.
 

@@ -6,6 +6,7 @@ const { execSync } = require('child_process');
 const { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } = require('fs');
 const { join } = require('path');
 const { homedir } = require('os');
+const readline = require('readline');
 
 // ── Config ──────────────────────────────────────────────────
 
@@ -303,6 +304,114 @@ function readStdin() {
   });
 }
 
+// ── Query runner ─────────────────────────────────────────────
+
+// Runs one formatted query through the tool-use loop.
+// history: shared array for REPL context (clean turns only). Pass [] for one-shot.
+async function runQuery(formattedMessage, history, client, model, tools) {
+  // Working messages = shared history + this turn's user message
+  const messages = [...history, { role: 'user', content: formattedMessage }];
+
+  let response;
+  let iterations = 0;
+  const MAX_ITERATIONS = 10;
+
+  while (iterations++ < MAX_ITERATIONS) {
+    log('api_request', {
+      iteration: iterations,
+      model,
+      max_tokens: MAX_TOKENS,
+      message_count: messages.length,
+      tools: tools.map(t => t.name || t.type),
+      system_prompt_length: systemPrompt.length,
+    });
+
+    response = await client.messages.create({
+      model,
+      max_tokens: MAX_TOKENS,
+      system: systemPrompt,
+      tools,
+      messages,
+    });
+
+    log('api_response', {
+      iteration: iterations,
+      stop_reason: response.stop_reason,
+      usage: response.usage,
+      content_types: response.content.map(b => b.type),
+    });
+
+    const toolCalls = response.content.filter(b => b.type === 'tool_use');
+    if (response.stop_reason !== 'tool_use' || toolCalls.length === 0) break;
+
+    messages.push({ role: 'assistant', content: response.content });
+
+    const results = [];
+    for (const call of toolCalls) {
+      const result = await executeTool(call.name, call.input);
+      results.push({ type: 'tool_result', tool_use_id: call.id, content: String(result) });
+    }
+    messages.push({ role: 'user', content: results });
+  }
+
+  let output = response.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('')
+    .trim();
+  output = output.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').trim();
+
+  // Append clean exchange to shared history so the next REPL turn has context
+  history.push({ role: 'user', content: formattedMessage });
+  if (output) history.push({ role: 'assistant', content: output });
+
+  return output;
+}
+
+// ── REPL ────────────────────────────────────────────────────
+
+async function startRepl(client, tools) {
+  const history = [];
+
+  console.log('got repl — quit or ctrl+d to exit\n');
+
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  process.stdout.write('> ');
+
+  for await (const line of rl) {
+    const input = line.trim();
+
+    if (!input) {
+      process.stdout.write('> ');
+      continue;
+    }
+
+    if (input === 'quit' || input === 'exit') {
+      rl.close();
+      break;
+    }
+
+    const query = isFunctionalQuery(input)
+      ? `[system query] ${input}`
+      : `got ${input} — hit me`;
+
+    try {
+      const output = await runQuery(query, history, client, MODEL_SONNET, tools);
+      if (output) console.log('\n' + output + '\n');
+    } catch (e) {
+      if (e.status === 429) {
+        console.log('\nRate limited. Give it a second.\n');
+      } else {
+        console.log(`\n${e.message || 'Something went wrong.'}\n`);
+      }
+    }
+
+    process.stdout.write('> ');
+  }
+
+  console.log('later.');
+}
+
 // ── Main ────────────────────────────────────────────────────
 
 async function main() {
@@ -317,6 +426,7 @@ async function main() {
     console.log(`got — one-arm-bandit CLI with personality
 
 Usage: got <query>
+       got repl
        <command> | got [question]
 
 WITTY MODE (default — personality first):
@@ -339,6 +449,9 @@ PIPE MODE (pipe content as context):
   git diff | got
   cat error.log | got explain this
 
+REPL MODE (persistent session with memory):
+  got repl
+
 Set ANTHROPIC_API_KEY in your environment.
 Set GOT_LOG=1 to enable logging to ~/.got/got.log
 `);
@@ -351,10 +464,15 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
   }
 
   const client = new Anthropic();
-  const model = stdinContent ? MODEL_SONNET : selectModel(query);
-
-  // Ensure location cache is populated for web search hints
   await fetchLocation();
+  const tools = [buildWebSearchTool(), ...customTools];
+
+  if (query === 'repl') {
+    await startRepl(client, tools);
+    return;
+  }
+
+  const model = stdinContent ? MODEL_SONNET : selectModel(query);
 
   // Build the final query, injecting piped content when present
   if (stdinContent) {
@@ -362,80 +480,13 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
     const tag = isFunctionalQuery(question) ? '[system query]' : '[piped input]';
     query = `${tag} ${question}\n\n<stdin>\n${stdinContent}\n</stdin>`;
   } else if (isFunctionalQuery(query)) {
-    // Functional queries get a data-first hint, everything else gets attitude
     query = `[system query] ${query}`;
   } else {
     query = `got ${query} — hit me`;
   }
-  
-  const tools = [buildWebSearchTool(), ...customTools];
-  const messages = [{ role: 'user', content: query }];
 
-  // Tool-use loop
-  let response;
-  let iterations = 0;
-  const MAX_ITERATIONS = 10;
-
-  while (iterations++ < MAX_ITERATIONS) {
-    const apiRequest = {
-      model: model,
-      max_tokens: MAX_TOKENS,
-      system: systemPrompt,
-      tools,
-      messages,
-    };
-    
-    log('api_request', {
-      iteration: iterations,
-      model: model,
-      max_tokens: MAX_TOKENS,
-      message_count: messages.length,
-      tools: tools.map(t => t.name || t.type),
-      system_prompt_length: systemPrompt.length,
-    });
-    
-    response = await client.messages.create(apiRequest);
-    
-    log('api_response', {
-      iteration: iterations,
-      stop_reason: response.stop_reason,
-      usage: response.usage,
-      content_types: response.content.map(b => b.type),
-    });
-
-    // Only loop if the model wants us to execute custom tools
-    const toolCalls = response.content.filter(b => b.type === 'tool_use');
-    if (response.stop_reason !== 'tool_use' || toolCalls.length === 0) break;
-
-    // Append the assistant's full response (including server_tool_use blocks)
-    messages.push({ role: 'assistant', content: response.content });
-
-    // Execute each custom tool and collect results
-    const results = [];
-    for (const call of toolCalls) {
-      const result = await executeTool(call.name, call.input);
-      results.push({
-        type: 'tool_result',
-        tool_use_id: call.id,
-        content: String(result),
-      });
-    }
-    messages.push({ role: 'user', content: results });
-  }
-
-  // Extract and print text
-  let output = response.content
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
-    .join('')
-    .trim();
-
-  // Strip citation tags
-  output = output.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').trim();
-
-  if (output) {
-    console.log(output);
-  }
+  const output = await runQuery(query, [], client, model, tools);
+  if (output) console.log(output);
 }
 
 main().catch(e => {
