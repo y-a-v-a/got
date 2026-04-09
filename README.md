@@ -36,6 +36,10 @@ npm link
 
 Requires `ANTHROPIC_API_KEY` in your environment.
 
+```bash
+got version          # print version
+```
+
 ## How it works
 
 `got` is your witty colleague with tools. It reads your query, decides what you
@@ -69,6 +73,15 @@ in memory across turns so it can reference what was just said. Same two modes ap
 ctrl+d to exit.
 
 Response is always 2-3 lines max.
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `ANTHROPIC_API_KEY` | Required |
+| `GOT_LOG=1` | Enable logging to `~/.got/got.log` |
+| `GOT_MODEL_SONNET` | Override the Sonnet model ID |
+| `GOT_MODEL_HAIKU` | Override the Haiku model ID |
 
 ## Safety
 

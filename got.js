@@ -11,8 +11,8 @@ const { createHash } = require('crypto');
 
 // ── Config ──────────────────────────────────────────────────
 
-const MODEL_SONNET = 'claude-sonnet-4-5-20250929';
-const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
+const MODEL_SONNET = process.env.GOT_MODEL_SONNET || 'claude-sonnet-4-5-20250929';
+const MODEL_HAIKU  = process.env.GOT_MODEL_HAIKU  || 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 1024;
 const CMD_TIMEOUT = 5000;
 const CACHE_DIR = join(homedir(), '.got');
@@ -428,15 +428,47 @@ function readStdin() {
 
 // ── Query runner ─────────────────────────────────────────────
 
-// Runs one formatted query through the tool-use loop.
+// Stateful filter: strips <cite>…</cite> tags from a text stream without
+// buffering the full response. Buffers only when inside a potential tag.
+function makeCiteStripper() {
+  let buf = '';
+  return {
+    push(text) {
+      buf += text;
+      let out = '';
+      while (buf.length) {
+        const lt = buf.indexOf('<');
+        if (lt === -1) { out += buf; buf = ''; break; }
+        out += buf.slice(0, lt);
+        buf = buf.slice(lt);
+        if (buf.startsWith('<cite')) {
+          const end = buf.indexOf('</cite>');
+          if (end === -1) break;           // incomplete tag — keep buffered
+          buf = buf.slice(end + 7);        // skip entire <cite>…</cite>
+        } else {
+          out += '<'; buf = buf.slice(1);  // not a cite tag, pass through
+        }
+      }
+      return out;
+    },
+    flush() {
+      const out = buf.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').replace(/<[^>]*$/, '');
+      buf = '';
+      return out;
+    },
+  };
+}
+
+// Runs one formatted query through the tool-use loop, streaming text to stdout.
 // history: shared array for REPL context (clean turns only). Pass [] for one-shot.
 async function runQuery(formattedMessage, history, client, model, tools, systemPrompt) {
-  // Working messages = shared history + this turn's user message
   const messages = [...history, { role: 'user', content: formattedMessage }];
 
   let response;
   let iterations = 0;
   const MAX_ITERATIONS = 10;
+  let rawText = '';
+  let didOutput = false;
 
   while (iterations++ < MAX_ITERATIONS) {
     log('api_request', {
@@ -448,13 +480,27 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
       system_prompt_length: systemPrompt.length,
     });
 
-    response = await client.messages.create({
+    const stripper = makeCiteStripper();
+    let iterText = '';
+
+    const stream = client.messages.stream({
       model,
       max_tokens: MAX_TOKENS,
       system: systemPrompt,
       tools,
       messages,
     });
+
+    stream.on('text', text => {
+      const safe = stripper.push(text);
+      if (safe) { process.stdout.write(safe); didOutput = true; }
+      iterText += text;
+    });
+
+    response = await stream.finalMessage();
+
+    const flushed = stripper.flush();
+    if (flushed) { process.stdout.write(flushed); didOutput = true; }
 
     log('api_response', {
       iteration: iterations,
@@ -464,7 +510,10 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
     });
 
     const toolCalls = response.content.filter(b => b.type === 'tool_use');
-    if (response.stop_reason !== 'tool_use' || toolCalls.length === 0) break;
+    if (response.stop_reason !== 'tool_use' || toolCalls.length === 0) {
+      rawText = iterText;
+      break;
+    }
 
     messages.push({ role: 'assistant', content: response.content });
 
@@ -476,18 +525,15 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
     messages.push({ role: 'user', content: results });
   }
 
-  let output = response.content
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
-    .join('')
-    .trim();
-  output = output.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').trim();
+  if (didOutput) process.stdout.write('\n');
 
-  // Append clean exchange to shared history so the next REPL turn has context
+  // Strip citations from accumulated text before storing in history
+  const cleanText = rawText.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').trim();
+
   history.push({ role: 'user', content: formattedMessage });
-  if (output) history.push({ role: 'assistant', content: output });
+  if (cleanText) history.push({ role: 'assistant', content: cleanText });
 
-  return output;
+  return cleanText;
 }
 
 // ── REPL ────────────────────────────────────────────────────
@@ -518,13 +564,14 @@ async function startRepl(client, tools, systemPrompt) {
       : `got ${input} — hit me`;
 
     try {
-      const output = await runQuery(query, history, client, MODEL_SONNET, tools, systemPrompt);
-      if (output) console.log('\n' + output + '\n');
+      await runQuery(query, history, client, MODEL_SONNET, tools, systemPrompt);
+      process.stdout.write('\n'); // blank line between response and next prompt
     } catch (e) {
+      process.stdout.write('\n');
       if (e.status === 429) {
-        console.log('\nRate limited. Give it a second.\n');
+        console.log('Rate limited. Give it a second.\n');
       } else {
-        console.log(`\n${e.message || 'Something went wrong.'}\n`);
+        console.log(`${e.message || 'Something went wrong.'}\n`);
       }
     }
 
@@ -576,7 +623,15 @@ REPL MODE (persistent session with memory):
 
 Set ANTHROPIC_API_KEY in your environment.
 Set GOT_LOG=1 to enable logging to ~/.got/got.log
+
+Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
 `);
+    process.exit(0);
+  }
+
+  if (query === 'version' || query === '--version' || query === '-v') {
+    const { version } = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'));
+    console.log(`got v${version}`);
     process.exit(0);
   }
 
@@ -612,8 +667,7 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
     query = `got ${query} — hit me`;
   }
 
-  const output = await runQuery(query, [], client, model, tools, systemPrompt);
-  if (output) console.log(output);
+  await runQuery(query, [], client, model, tools, systemPrompt);
 }
 
 main().catch(e => {
