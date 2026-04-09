@@ -36,6 +36,10 @@ npm link
 
 Requires `ANTHROPIC_API_KEY` in your environment.
 
+```bash
+got version          # print version
+```
+
 ## How it works
 
 `got` is your witty colleague with tools. It reads your query, decides what you
@@ -70,6 +74,15 @@ ctrl+d to exit.
 
 Response is always 2-3 lines max.
 
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `ANTHROPIC_API_KEY` | Required |
+| `GOT_LOG=1` | Enable logging to `~/.got/got.log` |
+| `GOT_MODEL_SONNET` | Override the Sonnet model ID |
+| `GOT_MODEL_HAIKU` | Override the Haiku model ID |
+
 ## Safety
 
 `got` never writes, modifies, or deletes anything. Commands are filtered
@@ -84,7 +97,8 @@ Not an assistant. Not a search engine. A person with opinions and access to tool
 **Customize:**
 - `prompts/SOUL.md` — who `got` is (voice, wit, personality)
 - `prompts/SYSTEM_PROMPT.md` — how `got` interprets queries
-- `prompts/ME.md` — context about you (optional, delete if you want)
+- `~/.got/me.md` — context about you (optional, not in the repo). Copy
+  `prompts/me.md.example` there and fill it in.
 
 **Philosophy:**
 Pull the lever, get a response. No ceremonies, no "let me help you", no walls

@@ -11,8 +11,8 @@ const { createHash } = require('crypto');
 
 // ── Config ──────────────────────────────────────────────────
 
-const MODEL_SONNET = 'claude-sonnet-4-5-20250929';
-const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
+const MODEL_SONNET = process.env.GOT_MODEL_SONNET || 'claude-sonnet-4-5-20250929';
+const MODEL_HAIKU  = process.env.GOT_MODEL_HAIKU  || 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 1024;
 const CMD_TIMEOUT = 5000;
 const CACHE_DIR = join(homedir(), '.got');
@@ -49,7 +49,8 @@ promptParts.push('<personality>');
 promptParts.push(readFileSync(join(promptDir, 'SOUL.md'), 'utf-8'));
 promptParts.push('</personality>');
 
-const mePath = join(promptDir, 'ME.md');
+// User context lives at ~/.got/me.md (not in the repo — see prompts/ME.md.example)
+const mePath = join(CACHE_DIR, 'me.md');
 if (existsSync(mePath)) {
   const me = readFileSync(mePath, 'utf-8').trim();
   if (me) {
@@ -115,6 +116,7 @@ const BLOCKED_PATTERNS = [
   /\bsed\s.*-i/,       // sed inline edit is a write
   /\bgit\s+(push|commit|reset|clean|checkout\s+-f|rebase|merge|stash\s+drop)\b/,
   /\b(node|python|python3|ruby)\s+(-e\b|-c\b)/,  // no eval via interpreters
+  /\bsystem_profiler\b(?!\s+SPHardwareDataType\b)/, // bare call dumps gigabytes; subcommand only
   /[\n\r]/,             // no newline injection
 ];
 
@@ -173,13 +175,19 @@ async function fetchLocation() {
   if (cached) return cached;
 
   try {
-    const res = await fetch('http://ip-api.com/json/?fields=city,regionName,country,countryCode,lat,lon,timezone');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(
+      'http://ip-api.com/json/?fields=city,regionName,country,countryCode,lat,lon,timezone',
+      { signal: controller.signal }
+    );
+    clearTimeout(timer);
     const data = await res.json();
     mkdirSync(CACHE_DIR, { recursive: true });
     writeFileSync(LOCATION_CACHE, JSON.stringify({ timestamp: Date.now(), data }));
     return data;
   } catch (e) {
-    return { error: e.message };
+    return { error: e.message }; // includes timeout (AbortError) — graceful fallback
   }
 }
 
@@ -190,7 +198,7 @@ const customTools = [
     name: 'run_command',
     description: [
       'Run a read-only shell command on the local machine.',
-      'Allowed: ls, cat, head, tail, find, grep, git, ps, df, du, uptime, uname, date, etc.',
+      'Allowed: ls, cat, head, tail, find, grep, git, ps, df, du, uptime, uname, date, system_profiler SPHardwareDataType, etc.',
       'Pipes between allowed commands are fine. No writes, no redirects, no sudo, no curl.',
       'The working directory is wherever the user invoked got.',
     ].join(' '),
@@ -295,10 +303,17 @@ function buildWebSearchTool() {
 
 // ── Project context ──────────────────────────────────────────
 
+// Strip characters that could break the <project_context> XML structure
+// or be used for prompt injection from untrusted project files.
+function sanitizeForPrompt(text) {
+  return text.replace(/[<>]/g, '').replace(/\0/g, '').trim();
+}
+
 function gatherProjectContext() {
   const cwd = process.cwd();
   const hash = createHash('md5').update(cwd).digest('hex').slice(0, 8);
-  const cacheFile = `/tmp/got-project-${hash}.json`;
+  mkdirSync(CACHE_DIR, { recursive: true });
+  const cacheFile = join(CACHE_DIR, `project-${hash}.json`);
 
   if (existsSync(cacheFile)) {
     try {
@@ -316,15 +331,15 @@ function gatherProjectContext() {
 
   // Git: branch, recent commits, dirty state
   try {
-    const branch = execSync('git branch --show-current', opts).trim();
+    const branch = sanitizeForPrompt(execSync('git branch --show-current', opts).trim());
     if (branch) lines.push(`Branch: ${branch}`);
   } catch {}
   try {
-    const gitLog = execSync('git log --oneline -5', opts).trim();
+    const gitLog = sanitizeForPrompt(execSync('git log --oneline -5', opts).trim());
     if (gitLog) lines.push(`Recent commits:\n${gitLog}`);
   } catch {}
   try {
-    const dirty = execSync('git status --short', opts).trim();
+    const dirty = sanitizeForPrompt(execSync('git status --short', opts).trim());
     if (dirty) lines.push(`Uncommitted:\n${dirty}`);
   } catch {}
 
@@ -368,7 +383,7 @@ function gatherProjectContext() {
     if (existsSync(join(projectRoot, file))) {
       try {
         const result = parse(readFileSync(join(projectRoot, file), 'utf-8'));
-        if (result) { lines.unshift(`Project: ${result}`); break; }
+        if (result) { lines.unshift(`Project: ${sanitizeForPrompt(result)}`); break; }
       } catch {}
     }
   }
@@ -377,13 +392,15 @@ function gatherProjectContext() {
   for (const name of ['README.md', 'README.rst', 'README.txt', 'README']) {
     if (existsSync(join(projectRoot, name))) {
       try {
-        const preview = readFileSync(join(projectRoot, name), 'utf-8')
-          .split('\n')
-          .map(l => l.replace(/^[#*\s]+/, '').trim())
-          .filter(Boolean)
-          .slice(0, 3)
-          .join(' ')
-          .slice(0, 300);
+        const preview = sanitizeForPrompt(
+          readFileSync(join(projectRoot, name), 'utf-8')
+            .split('\n')
+            .map(l => l.replace(/^[#*\s]+/, '').trim())
+            .filter(Boolean)
+            .slice(0, 3)
+            .join(' ')
+            .slice(0, 300)
+        );
         if (preview) lines.push(`README: ${preview}`);
       } catch {}
       break;
@@ -412,15 +429,47 @@ function readStdin() {
 
 // ── Query runner ─────────────────────────────────────────────
 
-// Runs one formatted query through the tool-use loop.
+// Stateful filter: strips <cite>…</cite> tags from a text stream without
+// buffering the full response. Buffers only when inside a potential tag.
+function makeCiteStripper() {
+  let buf = '';
+  return {
+    push(text) {
+      buf += text;
+      let out = '';
+      while (buf.length) {
+        const lt = buf.indexOf('<');
+        if (lt === -1) { out += buf; buf = ''; break; }
+        out += buf.slice(0, lt);
+        buf = buf.slice(lt);
+        if (buf.startsWith('<cite')) {
+          const end = buf.indexOf('</cite>');
+          if (end === -1) break;           // incomplete tag — keep buffered
+          buf = buf.slice(end + 7);        // skip entire <cite>…</cite>
+        } else {
+          out += '<'; buf = buf.slice(1);  // not a cite tag, pass through
+        }
+      }
+      return out;
+    },
+    flush() {
+      const out = buf.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').replace(/<[^>]*$/, '');
+      buf = '';
+      return out;
+    },
+  };
+}
+
+// Runs one formatted query through the tool-use loop, streaming text to stdout.
 // history: shared array for REPL context (clean turns only). Pass [] for one-shot.
 async function runQuery(formattedMessage, history, client, model, tools, systemPrompt) {
-  // Working messages = shared history + this turn's user message
   const messages = [...history, { role: 'user', content: formattedMessage }];
 
   let response;
   let iterations = 0;
   const MAX_ITERATIONS = 10;
+  let rawText = '';
+  let didOutput = false;
 
   while (iterations++ < MAX_ITERATIONS) {
     log('api_request', {
@@ -432,13 +481,27 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
       system_prompt_length: systemPrompt.length,
     });
 
-    response = await client.messages.create({
+    const stripper = makeCiteStripper();
+    let iterText = '';
+
+    const stream = client.messages.stream({
       model,
       max_tokens: MAX_TOKENS,
       system: systemPrompt,
       tools,
       messages,
     });
+
+    stream.on('text', text => {
+      const safe = stripper.push(text);
+      if (safe) { process.stdout.write(safe); didOutput = true; }
+      iterText += text;
+    });
+
+    response = await stream.finalMessage();
+
+    const flushed = stripper.flush();
+    if (flushed) { process.stdout.write(flushed); didOutput = true; }
 
     log('api_response', {
       iteration: iterations,
@@ -448,7 +511,10 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
     });
 
     const toolCalls = response.content.filter(b => b.type === 'tool_use');
-    if (response.stop_reason !== 'tool_use' || toolCalls.length === 0) break;
+    if (response.stop_reason !== 'tool_use' || toolCalls.length === 0) {
+      rawText = iterText;
+      break;
+    }
 
     messages.push({ role: 'assistant', content: response.content });
 
@@ -460,18 +526,15 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
     messages.push({ role: 'user', content: results });
   }
 
-  let output = response.content
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
-    .join('')
-    .trim();
-  output = output.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').trim();
+  if (didOutput) process.stdout.write('\n');
 
-  // Append clean exchange to shared history so the next REPL turn has context
+  // Strip citations from accumulated text before storing in history
+  const cleanText = rawText.replace(/<cite[^>]*>[\s\S]*?<\/cite>/gi, '').trim();
+
   history.push({ role: 'user', content: formattedMessage });
-  if (output) history.push({ role: 'assistant', content: output });
+  if (cleanText) history.push({ role: 'assistant', content: cleanText });
 
-  return output;
+  return cleanText;
 }
 
 // ── REPL ────────────────────────────────────────────────────
@@ -502,13 +565,14 @@ async function startRepl(client, tools, systemPrompt) {
       : `got ${input} — hit me`;
 
     try {
-      const output = await runQuery(query, history, client, MODEL_SONNET, tools, systemPrompt);
-      if (output) console.log('\n' + output + '\n');
+      await runQuery(query, history, client, MODEL_SONNET, tools, systemPrompt);
+      process.stdout.write('\n'); // blank line between response and next prompt
     } catch (e) {
+      process.stdout.write('\n');
       if (e.status === 429) {
-        console.log('\nRate limited. Give it a second.\n');
+        console.log('Rate limited. Give it a second.\n');
       } else {
-        console.log(`\n${e.message || 'Something went wrong.'}\n`);
+        console.log(`${e.message || 'Something went wrong.'}\n`);
       }
     }
 
@@ -560,7 +624,15 @@ REPL MODE (persistent session with memory):
 
 Set ANTHROPIC_API_KEY in your environment.
 Set GOT_LOG=1 to enable logging to ~/.got/got.log
+
+Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
 `);
+    process.exit(0);
+  }
+
+  if (query === 'version' || query === '--version' || query === '-v') {
+    const { version } = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'));
+    console.log(`got v${version}`);
     process.exit(0);
   }
 
@@ -570,13 +642,20 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
   }
 
   const client = new Anthropic();
-  await fetchLocation();
+  const location = await fetchLocation();
   const tools = [buildWebSearchTool(), ...customTools];
 
   const projectContext = gatherProjectContext();
-  const systemPrompt = projectContext
-    ? `${baseSystemPrompt}\n\n<project_context>\n${projectContext}\n</project_context>`
-    : baseSystemPrompt;
+  let systemPrompt = baseSystemPrompt;
+  if (location && location.city) {
+    const loc = sanitizeForPrompt(
+      `${location.city}, ${location.regionName}, ${location.country} (${location.timezone})`
+    );
+    systemPrompt += `\n\n<location>\n${loc}\n</location>`;
+  }
+  if (projectContext) {
+    systemPrompt += `\n\n<project_context>\n${projectContext}\n</project_context>`;
+  }
 
   if (query === 'repl') {
     await startRepl(client, tools, systemPrompt);
@@ -596,8 +675,7 @@ Set GOT_LOG=1 to enable logging to ~/.got/got.log
     query = `got ${query} — hit me`;
   }
 
-  const output = await runQuery(query, [], client, model, tools, systemPrompt);
-  if (output) console.log(output);
+  await runQuery(query, [], client, model, tools, systemPrompt);
 }
 
 main().catch(e => {

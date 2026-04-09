@@ -15,8 +15,8 @@ The query is wrapped with "with an ironic or sarcastic twist" UNLESS it matches 
 ## Core Architecture
 
 - **got.js** — Main executable. Tool-use loop, command safety, prompt loading, model selection
-- **prompts/** — Personality (SOUL.md), capabilities (SYSTEM_PROMPT.md), user context (ME.md)
-- **~/.got/** — Cache directory for location data and logs (when GOT_LOG=1)
+- **prompts/** — Personality (SOUL.md), capabilities (SYSTEM_PROMPT.md), example user context (ME.md.example)
+- **~/.got/** — Cache directory for location, project context, logs (GOT_LOG=1), and `me.md`
 
 ### Tools Available to the LLM
 
@@ -106,3 +106,8 @@ Set `GOT_LOG=1` to inspect tool use and API calls in `~/.got/got.log`.
 
 - `ANTHROPIC_API_KEY` — Required
 - `GOT_LOG` — Optional, set to "1" to enable logging
+
+## User Context
+
+Personal context lives at `~/.got/me.md` (not in the repo). It is never committed.
+Copy `prompts/me.md.example` there and fill it in. `prompts/ME.md` is in `.gitignore`.
