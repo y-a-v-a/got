@@ -110,4 +110,4 @@ Set `GOT_LOG=1` to inspect tool use and API calls in `~/.got/got.log`.
 ## User Context
 
 Personal context lives at `~/.got/me.md` (not in the repo). It is never committed.
-Copy `prompts/ME.md.example` there and fill it in. `prompts/ME.md` is in `.gitignore`.
+Copy `prompts/me.md.example` there and fill it in. `prompts/ME.md` is in `.gitignore`.
