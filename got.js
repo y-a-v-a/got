@@ -642,13 +642,20 @@ Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
   }
 
   const client = new Anthropic();
-  await fetchLocation();
+  const location = await fetchLocation();
   const tools = [buildWebSearchTool(), ...customTools];
 
   const projectContext = gatherProjectContext();
-  const systemPrompt = projectContext
-    ? `${baseSystemPrompt}\n\n<project_context>\n${projectContext}\n</project_context>`
-    : baseSystemPrompt;
+  let systemPrompt = baseSystemPrompt;
+  if (location && location.city) {
+    const loc = sanitizeForPrompt(
+      `${location.city}, ${location.regionName}, ${location.country} (${location.timezone})`
+    );
+    systemPrompt += `\n\n<location>\n${loc}\n</location>`;
+  }
+  if (projectContext) {
+    systemPrompt += `\n\n<project_context>\n${projectContext}\n</project_context>`;
+  }
 
   if (query === 'repl') {
     await startRepl(client, tools, systemPrompt);
