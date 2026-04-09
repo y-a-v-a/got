@@ -312,7 +312,8 @@ function sanitizeForPrompt(text) {
 function gatherProjectContext() {
   const cwd = process.cwd();
   const hash = createHash('md5').update(cwd).digest('hex').slice(0, 8);
-  const cacheFile = `/tmp/got-project-${hash}.json`;
+  mkdirSync(CACHE_DIR, { recursive: true });
+  const cacheFile = join(CACHE_DIR, `project-${hash}.json`);
 
   if (existsSync(cacheFile)) {
     try {
