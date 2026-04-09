@@ -49,7 +49,8 @@ promptParts.push('<personality>');
 promptParts.push(readFileSync(join(promptDir, 'SOUL.md'), 'utf-8'));
 promptParts.push('</personality>');
 
-const mePath = join(promptDir, 'ME.md');
+// User context lives at ~/.got/me.md (not in the repo — see prompts/ME.md.example)
+const mePath = join(CACHE_DIR, 'me.md');
 if (existsSync(mePath)) {
   const me = readFileSync(mePath, 'utf-8').trim();
   if (me) {
@@ -173,13 +174,19 @@ async function fetchLocation() {
   if (cached) return cached;
 
   try {
-    const res = await fetch('http://ip-api.com/json/?fields=city,regionName,country,countryCode,lat,lon,timezone');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(
+      'http://ip-api.com/json/?fields=city,regionName,country,countryCode,lat,lon,timezone',
+      { signal: controller.signal }
+    );
+    clearTimeout(timer);
     const data = await res.json();
     mkdirSync(CACHE_DIR, { recursive: true });
     writeFileSync(LOCATION_CACHE, JSON.stringify({ timestamp: Date.now(), data }));
     return data;
   } catch (e) {
-    return { error: e.message };
+    return { error: e.message }; // includes timeout (AbortError) — graceful fallback
   }
 }
 
@@ -295,6 +302,12 @@ function buildWebSearchTool() {
 
 // ── Project context ──────────────────────────────────────────
 
+// Strip characters that could break the <project_context> XML structure
+// or be used for prompt injection from untrusted project files.
+function sanitizeForPrompt(text) {
+  return text.replace(/[<>]/g, '').replace(/\0/g, '').trim();
+}
+
 function gatherProjectContext() {
   const cwd = process.cwd();
   const hash = createHash('md5').update(cwd).digest('hex').slice(0, 8);
@@ -316,15 +329,15 @@ function gatherProjectContext() {
 
   // Git: branch, recent commits, dirty state
   try {
-    const branch = execSync('git branch --show-current', opts).trim();
+    const branch = sanitizeForPrompt(execSync('git branch --show-current', opts).trim());
     if (branch) lines.push(`Branch: ${branch}`);
   } catch {}
   try {
-    const gitLog = execSync('git log --oneline -5', opts).trim();
+    const gitLog = sanitizeForPrompt(execSync('git log --oneline -5', opts).trim());
     if (gitLog) lines.push(`Recent commits:\n${gitLog}`);
   } catch {}
   try {
-    const dirty = execSync('git status --short', opts).trim();
+    const dirty = sanitizeForPrompt(execSync('git status --short', opts).trim());
     if (dirty) lines.push(`Uncommitted:\n${dirty}`);
   } catch {}
 
@@ -368,7 +381,7 @@ function gatherProjectContext() {
     if (existsSync(join(projectRoot, file))) {
       try {
         const result = parse(readFileSync(join(projectRoot, file), 'utf-8'));
-        if (result) { lines.unshift(`Project: ${result}`); break; }
+        if (result) { lines.unshift(`Project: ${sanitizeForPrompt(result)}`); break; }
       } catch {}
     }
   }
@@ -377,13 +390,15 @@ function gatherProjectContext() {
   for (const name of ['README.md', 'README.rst', 'README.txt', 'README']) {
     if (existsSync(join(projectRoot, name))) {
       try {
-        const preview = readFileSync(join(projectRoot, name), 'utf-8')
-          .split('\n')
-          .map(l => l.replace(/^[#*\s]+/, '').trim())
-          .filter(Boolean)
-          .slice(0, 3)
-          .join(' ')
-          .slice(0, 300);
+        const preview = sanitizeForPrompt(
+          readFileSync(join(projectRoot, name), 'utf-8')
+            .split('\n')
+            .map(l => l.replace(/^[#*\s]+/, '').trim())
+            .filter(Boolean)
+            .slice(0, 3)
+            .join(' ')
+            .slice(0, 300)
+        );
         if (preview) lines.push(`README: ${preview}`);
       } catch {}
       break;

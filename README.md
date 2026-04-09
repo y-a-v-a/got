@@ -84,7 +84,8 @@ Not an assistant. Not a search engine. A person with opinions and access to tool
 **Customize:**
 - `prompts/SOUL.md` — who `got` is (voice, wit, personality)
 - `prompts/SYSTEM_PROMPT.md` — how `got` interprets queries
-- `prompts/ME.md` — context about you (optional, delete if you want)
+- `~/.got/me.md` — context about you (optional, not in the repo). Copy
+  `prompts/ME.md.example` there and fill it in.
 
 **Philosophy:**
 Pull the lever, get a response. No ceremonies, no "let me help you", no walls
