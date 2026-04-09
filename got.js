@@ -116,6 +116,7 @@ const BLOCKED_PATTERNS = [
   /\bsed\s.*-i/,       // sed inline edit is a write
   /\bgit\s+(push|commit|reset|clean|checkout\s+-f|rebase|merge|stash\s+drop)\b/,
   /\b(node|python|python3|ruby)\s+(-e\b|-c\b)/,  // no eval via interpreters
+  /\bsystem_profiler\b(?!\s+SPHardwareDataType\b)/, // bare call dumps gigabytes; subcommand only
   /[\n\r]/,             // no newline injection
 ];
 
@@ -197,7 +198,7 @@ const customTools = [
     name: 'run_command',
     description: [
       'Run a read-only shell command on the local machine.',
-      'Allowed: ls, cat, head, tail, find, grep, git, ps, df, du, uptime, uname, date, etc.',
+      'Allowed: ls, cat, head, tail, find, grep, git, ps, df, du, uptime, uname, date, system_profiler SPHardwareDataType, etc.',
       'Pipes between allowed commands are fine. No writes, no redirects, no sudo, no curl.',
       'The working directory is wherever the user invoked got.',
     ].join(' '),
