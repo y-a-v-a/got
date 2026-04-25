@@ -319,24 +319,20 @@ describe('isFunctionalQuery', () => {
 // ── selectModel ─────────────────────────────────────────────
 
 describe('selectModel', () => {
-  it('returns haiku for functional queries', () => {
+  it('returns haiku for functional/system queries', () => {
     assert.match(selectModel('memory'), /haiku/i);
     assert.match(selectModel('battery'), /haiku/i);
     assert.match(selectModel('disk'), /haiku/i);
+    assert.match(selectModel('status'), /haiku/i);
+    assert.match(selectModel('branches'), /haiku/i);
   });
 
-  it('returns haiku for simple patterns', () => {
-    assert.match(selectModel('hi'), /haiku/i);
-    assert.match(selectModel('hello'), /haiku/i);
-    assert.match(selectModel('weather'), /haiku/i);
-    assert.match(selectModel('ls'), /haiku/i);
-    assert.match(selectModel('date'), /haiku/i);
-  });
-
-  it('returns sonnet for complex queries', () => {
-    assert.match(selectModel('explain quantum physics'), /sonnet/i);
+  it('returns sonnet for everything else (personality needs the stronger model)', () => {
     assert.match(selectModel('shakespeare'), /sonnet/i);
-    assert.match(selectModel('compare the philosophical traditions of stoicism and existentialism'), /sonnet/i);
+    assert.match(selectModel('weather'), /sonnet/i);
+    assert.match(selectModel('hi'), /sonnet/i);
+    assert.match(selectModel('trump'), /sonnet/i);
+    assert.match(selectModel('explain quantum physics'), /sonnet/i);
   });
 });
 

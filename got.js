@@ -42,13 +42,14 @@ function log(type, data) {
 const promptDir = join(__dirname, 'prompts');
 const promptParts = [];
 
-promptParts.push('<system_instructions>');
-promptParts.push(readFileSync(join(promptDir, 'SYSTEM_PROMPT.md'), 'utf-8'));
-promptParts.push('</system_instructions>');
-
+// Personality first — primacy bias means the model internalizes voice before rules
 promptParts.push('<personality>');
 promptParts.push(readFileSync(join(promptDir, 'SOUL.md'), 'utf-8'));
 promptParts.push('</personality>');
+
+promptParts.push('<system_instructions>');
+promptParts.push(readFileSync(join(promptDir, 'SYSTEM_PROMPT.md'), 'utf-8'));
+promptParts.push('</system_instructions>');
 
 // User context lives at ~/.got/me.md (not in the repo — see prompts/ME.md.example)
 const mePath = join(CACHE_DIR, 'me.md');
@@ -308,25 +309,14 @@ function isFunctionalQuery(query) {
 // ── Model selection ─────────────────────────────────────────
 
 function selectModel(query) {
-  const q = query.toLowerCase();
-  
-  // Simple patterns that Haiku handles well
-  const simplePatterns = [
-    /^(what is|what's|whats) \d+[\s\+\-\*\/]+\d+/,  // math
-    /^(ls|pwd|date|uptime|whoami|hostname|df|du)\b/, // simple commands
-    /^(weather|time|temperature)\b/,                  // basic info
-    /^what (is|are) .{1,20}$/,                       // short questions
-    /^(hi|hello|hey)\b/,                             // greetings
-  ];
-  
-  // Use Haiku for simple/functional queries
-  if (isFunctionalQuery(query) || simplePatterns.some(p => p.test(q))) {
-    log('model_selection', { model: 'haiku', query: q.slice(0, 50) });
+  // Haiku for system/functional queries only — data, no personality needed.
+  // Everything else uses Sonnet — personality requires the stronger model.
+  if (isFunctionalQuery(query)) {
+    log('model_selection', { model: 'haiku', query: query.slice(0, 50) });
     return MODEL_HAIKU;
   }
   
-  // Use Sonnet for complex queries
-  log('model_selection', { model: 'sonnet', query: q.slice(0, 50) });
+  log('model_selection', { model: 'sonnet', query: query.slice(0, 50) });
   return MODEL_SONNET;
 }
 
@@ -623,7 +613,7 @@ async function startRepl(client, tools, systemPrompt) {
 
     const query = isFunctionalQuery(input)
       ? `[system query] ${input}`
-      : `got ${input} — hit me`;
+      : `got ${input}`;
 
     try {
       // REPL always uses Sonnet — conversational context benefits from the stronger model
@@ -717,6 +707,9 @@ Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
     systemPrompt += `\n\n<project_context>\n${projectContext}\n</project_context>`;
   }
 
+  // Voice anchor at the end of system prompt — recency bias reinforcement
+  systemPrompt += '\n\n<reminder>Stay in character. Dry, brief, opinionated. Not an assistant.</reminder>';
+
   if (query === 'repl') {
     await startRepl(client, tools, systemPrompt);
     return;
@@ -732,7 +725,7 @@ Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
   } else if (isFunctionalQuery(query)) {
     query = `[system query] ${query}`;
   } else {
-    query = `got ${query} — hit me`;
+    query = `got ${query}`;
   }
 
   await runQuery(query, [], client, model, tools, systemPrompt);
