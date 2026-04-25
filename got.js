@@ -217,7 +217,7 @@ function readLocationCache() {
   try {
     const cached = JSON.parse(readFileSync(LOCATION_CACHE, 'utf-8'));
     if (Date.now() - cached.timestamp < LOCATION_TTL) return cached.data;
-  } catch {}
+  } catch (e) { log('cache_error', { file: 'location', error: e.message }); }
   return null;
 }
 
@@ -370,7 +370,7 @@ function gatherProjectContext() {
     try {
       const cached = JSON.parse(readFileSync(cacheFile, 'utf-8'));
       if (Date.now() - cached.timestamp < PROJECT_CACHE_TTL) return cached.context;
-    } catch {}
+    } catch (e) { log('cache_error', { file: 'project', error: e.message }); }
   }
 
   const lines = [];
@@ -378,21 +378,21 @@ function gatherProjectContext() {
 
   // Determine project root (git root if available, else cwd)
   let projectRoot = cwd;
-  try { projectRoot = execSync('git rev-parse --show-toplevel', opts).trim(); } catch {}
+  try { projectRoot = execSync('git rev-parse --show-toplevel', opts).trim(); } catch (e) { log('git_error', { cmd: 'rev-parse', error: e.message }); }
 
   // Git: branch, recent commits, dirty state
   try {
     const branch = sanitizeForPrompt(execSync('git branch --show-current', opts).trim());
     if (branch) lines.push(`Branch: ${branch}`);
-  } catch {}
+  } catch (e) { log('git_error', { cmd: 'branch', error: e.message }); }
   try {
     const gitLog = sanitizeForPrompt(execSync('git log --oneline -5', opts).trim());
     if (gitLog) lines.push(`Recent commits:\n${gitLog}`);
-  } catch {}
+  } catch (e) { log('git_error', { cmd: 'log', error: e.message }); }
   try {
     const dirty = sanitizeForPrompt(execSync('git status --short', opts).trim());
     if (dirty) lines.push(`Uncommitted:\n${dirty}`);
-  } catch {}
+  } catch (e) { log('git_error', { cmd: 'status', error: e.message }); }
 
   // Project manifest — first match wins, prepended so it leads the context
   const manifests = [
@@ -435,7 +435,7 @@ function gatherProjectContext() {
       try {
         const result = parse(readFileSync(join(projectRoot, file), 'utf-8'));
         if (result) { lines.unshift(`Project: ${sanitizeForPrompt(result)}`); break; }
-      } catch {}
+      } catch (e) { log('manifest_error', { file, error: e.message }); }
     }
   }
 
@@ -453,7 +453,7 @@ function gatherProjectContext() {
             .slice(0, 300)
         );
         if (preview) lines.push(`README: ${preview}`);
-      } catch {}
+      } catch (e) { log('readme_error', { name, error: e.message }); }
       break;
     }
   }
@@ -461,7 +461,7 @@ function gatherProjectContext() {
   const context = lines.length ? lines.join('\n') : null;
   log('project_context', { cwd, lines: lines.length });
 
-  try { writeFileSync(cacheFile, JSON.stringify({ timestamp: Date.now(), context })); } catch {}
+  try { writeFileSync(cacheFile, JSON.stringify({ timestamp: Date.now(), context })); } catch (e) { log('cache_write_error', { file: cacheFile, error: e.message }); }
   return context;
 }
 
