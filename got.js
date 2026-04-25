@@ -571,7 +571,7 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
       results.push({ type: 'tool_result', tool_use_id: call.id, content: String(result) });
     }
     // Voice nudge after tool results — recency reinforcement
-    results.push({ type: 'text', text: '[respond in max 2 lines]' });
+    results.push({ type: 'text', text: '[now respond in max 2 lines. sound like a person, not a newsfeed. end with a wry remark, not a fact.]' });
     messages.push({ role: 'user', content: results });
   }
 
