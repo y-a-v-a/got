@@ -571,7 +571,7 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
       results.push({ type: 'tool_result', tool_use_id: call.id, content: String(result) });
     }
     // Voice nudge after tool results — recency reinforcement
-    results.push({ type: 'text', text: '[2 lines. Grab one detail, riff on it, stop. Do not summarize.]' });
+    results.push({ type: 'text', text: '[2 lines. One fact, then your take. No take = failed response.]' });
     messages.push({ role: 'user', content: results });
   }
 
