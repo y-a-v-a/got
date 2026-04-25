@@ -273,6 +273,11 @@ describe('validateCommand', () => {
       const result = validateCommand('system_profiler SPUSBDataType');
       assert.equal(result.ok, false);
     });
+
+    it('blocks system_profiler with multiple data types', () => {
+      const result = validateCommand('system_profiler SPHardwareDataType SPUSBDataType');
+      assert.equal(result.ok, false);
+    });
   });
 });
 

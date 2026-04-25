@@ -126,7 +126,7 @@ const BLOCKED_PATTERNS = [
   /\bcurl\b/,          // no arbitrary HTTP — use web_search
   /\bwget\b/,
   // git and interpreter restrictions handled in validateCommand
-  /\bsystem_profiler\b(?!\s+SPHardwareDataType\b)/, // bare call dumps gigabytes; subcommand only
+  // system_profiler handled in validateCommand
   /[\n\r]/,             // no newline injection
 ];
 
@@ -168,6 +168,14 @@ function validateCommand(cmd) {
       const args = parts.slice(1);
       if (args.length !== 1 || !['--version', '-v', '-V'].includes(args[0])) {
         return { ok: false, reason: `${base} only allowed with --version` };
+      }
+      continue;
+    }
+
+    // system_profiler: only SPHardwareDataType, nothing else
+    if (base === 'system_profiler') {
+      if (parts.length !== 2 || parts[1] !== 'SPHardwareDataType') {
+        return { ok: false, reason: 'system_profiler only allowed with SPHardwareDataType' };
       }
       continue;
     }
