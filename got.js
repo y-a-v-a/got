@@ -570,6 +570,8 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
       const result = await executeTool(call.name, call.input);
       results.push({ type: 'tool_result', tool_use_id: call.id, content: String(result) });
     }
+    // Voice nudge after tool results — recency reinforcement
+    results.push({ type: 'text', text: '[Remember: 2-3 lines max. Be yourself, not a search result.]' });
     messages.push({ role: 'user', content: results });
   }
 
