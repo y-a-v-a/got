@@ -5,6 +5,9 @@
   "bin": {
     "got": "./got.js"
   },
+  "scripts": {
+    "test": "node --test test.js"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0"
   },

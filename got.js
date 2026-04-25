@@ -720,6 +720,21 @@ Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
   await runQuery(query, [], client, model, tools, systemPrompt);
 }
 
+// ── Exports for testing ─────────────────────────────────────
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    validateCommand,
+    isFunctionalQuery,
+    selectModel,
+    makeCiteStripper,
+    sanitizeForPrompt,
+  };
+}
+
+// ── Run ─────────────────────────────────────────────────────
+
+if (require.main === module) {
 main().catch(e => {
   if (e.status === 401) {
     console.log('Invalid API key.');
@@ -730,3 +745,4 @@ main().catch(e => {
   }
   process.exit(1);
 });
+}
