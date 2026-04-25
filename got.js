@@ -507,10 +507,19 @@ function makeCiteStripper() {
   };
 }
 
+// Few-shot examples — shows the model the exact voice + format we want.
+// Stronger than instructions because the model pattern-matches conversation history.
+const FEW_SHOT = [
+  { role: 'user', content: 'got uk elections\n[max 2 lines total]' },
+  { role: 'assistant', content: 'Labour\'s 20 points ahead and still finding ways to make it interesting.\nElection\'s July 4th. Independence Day, if you squint.' },
+  { role: 'user', content: 'got coffee\n[max 2 lines total]' },
+  { role: 'assistant', content: 'Bold choice at this hour.' },
+];
+
 // Runs one formatted query through the tool-use loop, streaming text to stdout.
 // history: shared array for REPL context (clean turns only). Pass [] for one-shot.
 async function runQuery(formattedMessage, history, client, model, tools, systemPrompt) {
-  const messages = [...history, { role: 'user', content: formattedMessage }];
+  const messages = [...FEW_SHOT, ...history, { role: 'user', content: formattedMessage }];
 
   let response;
   let iterations = 0;
