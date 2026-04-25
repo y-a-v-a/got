@@ -260,7 +260,8 @@ const customTools = [
     name: 'run_command',
     description: [
       'Run a read-only shell command on the local machine.',
-      'Allowed: ls, cat, head, tail, find, grep, git, ps, df, du, uptime, uname, date, system_profiler SPHardwareDataType, etc.',
+      'Allowed: ls, cat, head, tail, find, grep, git, ps, df, du, uptime, uname, date, system_profiler SPHardwareDataType,',
+      'sysctl, pmset -g batt (battery), vm_stat (memory), top -l 1 (cpu snapshot), and more.',
       'Pipes between allowed commands are fine. No writes, no redirects, no sudo, no curl.',
       'The working directory is wherever the user invoked got.',
     ].join(' '),
