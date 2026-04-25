@@ -13,7 +13,7 @@ const { createHash } = require('crypto');
 
 const MODEL_SONNET = process.env.GOT_MODEL_SONNET || 'claude-sonnet-4-5-20250929';
 const MODEL_HAIKU  = process.env.GOT_MODEL_HAIKU  || 'claude-haiku-4-5-20251001';
-const MAX_TOKENS = 512;
+const MAX_TOKENS = 256;
 const CMD_TIMEOUT = 5000;
 const MAX_HISTORY_TURNS = 20; // each turn = user + assistant = 2 entries
 const CACHE_DIR = join(homedir(), '.got');
@@ -571,7 +571,7 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
       results.push({ type: 'tool_result', tool_use_id: call.id, content: String(result) });
     }
     // Voice nudge after tool results — recency reinforcement
-    results.push({ type: 'text', text: '[2 lines. One fact, then your take. No take = failed response.]' });
+    results.push({ type: 'text', text: '[respond in max 2 lines]' });
     messages.push({ role: 'user', content: results });
   }
 
@@ -615,7 +615,7 @@ async function startRepl(client, tools, systemPrompt) {
 
     const query = isFunctionalQuery(input)
       ? `[system query] ${input}`
-      : `got ${input}\n[2 lines. one fact, one dry take.]`;
+      : `got ${input}\n[max 2 lines total]`;
 
     try {
       // REPL always uses Sonnet — conversational context benefits from the stronger model
@@ -723,11 +723,11 @@ Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
   if (stdinContent) {
     const question = query || 'what is this?';
     const tag = isFunctionalQuery(question) ? '[system query]' : '[piped input]';
-    query = `${tag} ${question}\n\n<stdin>\n${stdinContent}\n</stdin>\n[2-3 lines. be sharp.]`;
+    query = `${tag} ${question}\n\n<stdin>\n${stdinContent}\n</stdin>\n[max 3 lines]`;
   } else if (isFunctionalQuery(query)) {
     query = `[system query] ${query}`;
   } else {
-    query = `got ${query}\n[2 lines. one fact, one dry take.]`;
+    query = `got ${query}\n[max 2 lines total]`;
   }
 
   await runQuery(query, [], client, model, tools, systemPrompt);
