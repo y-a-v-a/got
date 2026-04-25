@@ -15,6 +15,7 @@ const MODEL_SONNET = process.env.GOT_MODEL_SONNET || 'claude-sonnet-4-5-20250929
 const MODEL_HAIKU  = process.env.GOT_MODEL_HAIKU  || 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 1024;
 const CMD_TIMEOUT = 5000;
+const MAX_HISTORY_TURNS = 20; // each turn = user + assistant = 2 entries
 const CACHE_DIR = join(homedir(), '.got');
 const LOCATION_CACHE = join(CACHE_DIR, 'location.json');
 const LOCATION_TTL = 24 * 60 * 60 * 1000;
@@ -575,6 +576,10 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
 
   history.push({ role: 'user', content: formattedMessage });
   if (cleanText) history.push({ role: 'assistant', content: cleanText });
+
+  // Cap history to avoid unbounded context growth in REPL sessions
+  const maxEntries = MAX_HISTORY_TURNS * 2;
+  while (history.length > maxEntries) history.shift();
 
   return cleanText;
 }
