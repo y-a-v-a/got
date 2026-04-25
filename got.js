@@ -626,6 +626,7 @@ async function startRepl(client, tools, systemPrompt) {
       : `got ${input} — hit me`;
 
     try {
+      // REPL always uses Sonnet — conversational context benefits from the stronger model
       await runQuery(query, history, client, MODEL_SONNET, tools, systemPrompt);
       process.stdout.write('\n'); // blank line between response and next prompt
     } catch (e) {
@@ -646,14 +647,12 @@ async function startRepl(client, tools, systemPrompt) {
 // ── Main ────────────────────────────────────────────────────
 
 async function main() {
-  const [stdinContent, rawArgs] = await Promise.all([
-    readStdin(),
-    Promise.resolve(process.argv.slice(2).join(' ')),
-  ]);
+  const rawArgs = process.argv.slice(2).join(' ');
+  const stdinContent = await readStdin();
 
   let query = rawArgs;
 
-  if (!query && !stdinContent || query === 'help' || query === '--help' || query === '-h') {
+  if ((!query && !stdinContent) || query === 'help' || query === '--help' || query === '-h') {
     console.log(`got — one-arm-bandit CLI with personality
 
 Usage: got <query>
