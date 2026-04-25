@@ -79,8 +79,8 @@ const ALLOWED_COMMANDS = new Set([
   // files (read-only)
   'ls', 'cat', 'head', 'tail', 'find', 'file', 'wc', 'stat',
   'du', 'df', 'tree', 'realpath', 'basename', 'dirname',
-  // processes (top excluded — runs interactively, use ps instead)
-  'ps', 'pgrep', 'lsof', 'vm_stat', 'free',
+  // processes & system health
+  'ps', 'pgrep', 'lsof', 'vm_stat', 'free', 'pmset', 'top',
   // network (read-only)
   'ping', 'dig', 'nslookup', 'ifconfig', 'ip', 'host', 'networksetup',
   // git — validated separately via GIT_ALLOWED_SUBCOMMANDS
@@ -169,6 +169,14 @@ function validateCommand(cmd) {
       const args = parts.slice(1);
       if (args.length !== 1 || !['--version', '-v', '-V'].includes(args[0])) {
         return { ok: false, reason: `${base} only allowed with --version` };
+      }
+      continue;
+    }
+
+    // top: only snapshot mode (-l), not interactive
+    if (base === 'top') {
+      if (!parts.some(a => a === '-l')) {
+        return { ok: false, reason: 'top only allowed in snapshot mode (-l)' };
       }
       continue;
     }

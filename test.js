@@ -256,6 +256,21 @@ describe('validateCommand', () => {
     }
   });
 
+  describe('pmset and top', () => {
+    it('allows pmset -g batt', () => {
+      assert.deepStrictEqual(validateCommand('pmset -g batt'), { ok: true });
+    });
+
+    it('allows top in snapshot mode', () => {
+      assert.deepStrictEqual(validateCommand('top -l 1'), { ok: true });
+    });
+
+    it('blocks interactive top', () => {
+      const result = validateCommand('top');
+      assert.equal(result.ok, false);
+    });
+  });
+
   describe('system_profiler restriction', () => {
     it('allows system_profiler SPHardwareDataType', () => {
       assert.deepStrictEqual(
