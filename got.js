@@ -81,14 +81,25 @@ const ALLOWED_COMMANDS = new Set([
   'ps', 'pgrep', 'lsof', 'vm_stat', 'free',
   // network (read-only)
   'ping', 'dig', 'nslookup', 'ifconfig', 'ip', 'host', 'networksetup',
-  // git (all subcommands are read-safe enough given no shell writes)
-  'git',
+  // git — validated separately via GIT_ALLOWED_SUBCOMMANDS
   // text processing (no sed/awk — both can write files)
   'grep', 'sort', 'uniq', 'cut', 'tr', 'jq',
   // introspection
   'which', 'type', 'echo', 'locale', 'pwd',
-  // language version checks
-  'node', 'npm', 'python', 'python3', 'ruby', 'java', 'rustc', 'cargo',
+  // language runtimes — validated separately via VERSION_ONLY_COMMANDS
+  'npm',
+]);
+
+// Git: only these subcommands are allowed (read-only operations)
+const GIT_ALLOWED_SUBCOMMANDS = new Set([
+  'status', 'log', 'diff', 'branch', 'show', 'rev-parse', 'remote',
+  'tag', 'shortlog', 'stash', 'blame', 'ls-files', 'ls-tree',
+  'describe', 'name-rev', 'rev-list',
+]);
+
+// These commands may only be called with --version / -v / -V
+const VERSION_ONLY_COMMANDS = new Set([
+  'node', 'python', 'python3', 'ruby', 'java', 'rustc', 'cargo',
 ]);
 
 const BLOCKED_PATTERNS = [
@@ -113,8 +124,7 @@ const BLOCKED_PATTERNS = [
   /\bshutdown\b/,
   /\bcurl\b/,          // no arbitrary HTTP — use web_search
   /\bwget\b/,
-  /\bgit\s+(push|commit|reset|clean|checkout\s+-f|rebase|merge|stash\s+drop)\b/,
-  /\b(node|python|python3|ruby)\s+(-e\b|-c\b)/,  // no eval via interpreters
+  // git and interpreter restrictions handled in validateCommand
   /\bsystem_profiler\b(?!\s+SPHardwareDataType\b)/, // bare call dumps gigabytes; subcommand only
   /[\n\r]/,             // no newline injection
 ];
@@ -127,7 +137,40 @@ function validateCommand(cmd) {
   }
   const segments = cmd.split('|').map(s => s.trim()).filter(Boolean);
   for (const seg of segments) {
-    const base = seg.split(/\s+/)[0];
+    const parts = seg.split(/\s+/);
+    const base = parts[0];
+
+    // Git: allowlist of read-only subcommands
+    if (base === 'git') {
+      const sub = parts[1];
+      if (!sub || !GIT_ALLOWED_SUBCOMMANDS.has(sub)) {
+        return { ok: false, reason: `Git subcommand not allowed: ${sub || '(none)'}` };
+      }
+      // Block destructive flags on otherwise-safe subcommands
+      if (sub === 'branch' && parts.some(a => /^-[dD]$/.test(a))) {
+        return { ok: false, reason: 'Blocked: git branch delete' };
+      }
+      if (sub === 'tag' && parts.some(a => /^-[dD]$/.test(a))) {
+        return { ok: false, reason: 'Blocked: git tag delete' };
+      }
+      if (sub === 'remote' && parts.length > 2 && !['show', '-v'].includes(parts[2])) {
+        return { ok: false, reason: 'Blocked: git remote mutation' };
+      }
+      if (sub === 'stash' && parts.length > 2 && !['list', 'show'].includes(parts[2])) {
+        return { ok: false, reason: 'Blocked: git stash mutation' };
+      }
+      continue;
+    }
+
+    // Language runtimes: version check only
+    if (VERSION_ONLY_COMMANDS.has(base)) {
+      const args = parts.slice(1);
+      if (args.length !== 1 || !['--version', '-v', '-V'].includes(args[0])) {
+        return { ok: false, reason: `${base} only allowed with --version` };
+      }
+      continue;
+    }
+
     if (!ALLOWED_COMMANDS.has(base)) {
       return { ok: false, reason: `Not allowed: ${base}` };
     }
