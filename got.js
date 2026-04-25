@@ -359,7 +359,7 @@ function buildWebSearchTool() {
 // Strip characters that could break the <project_context> XML structure
 // or be used for prompt injection from untrusted project files.
 function sanitizeForPrompt(text) {
-  return text.replace(/[<>]/g, '').replace(/\0/g, '').trim();
+  return text.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\0/g, '').trim();
 }
 
 function gatherProjectContext() {

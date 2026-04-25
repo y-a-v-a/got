@@ -387,8 +387,12 @@ describe('makeCiteStripper', () => {
 // ── sanitizeForPrompt ───────────────────────────────────────
 
 describe('sanitizeForPrompt', () => {
-  it('strips angle brackets', () => {
-    assert.equal(sanitizeForPrompt('<script>alert("xss")</script>'), 'scriptalert("xss")/script');
+  it('escapes angle brackets', () => {
+    assert.equal(sanitizeForPrompt('<script>alert("xss")</script>'), '&lt;script&gt;alert("xss")&lt;/script&gt;');
+  });
+
+  it('preserves generics like Array<String>', () => {
+    assert.equal(sanitizeForPrompt('Array<String>'), 'Array&lt;String&gt;');
   });
 
   it('strips null bytes', () => {
