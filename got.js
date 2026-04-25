@@ -83,8 +83,8 @@ const ALLOWED_COMMANDS = new Set([
   'ping', 'dig', 'nslookup', 'ifconfig', 'ip', 'host', 'networksetup',
   // git (all subcommands are read-safe enough given no shell writes)
   'git',
-  // text processing
-  'grep', 'awk', 'sed', 'sort', 'uniq', 'cut', 'tr', 'jq',
+  // text processing (no sed/awk — both can write files)
+  'grep', 'sort', 'uniq', 'cut', 'tr', 'jq',
   // introspection
   'which', 'type', 'echo', 'locale', 'pwd',
   // language version checks
@@ -113,7 +113,6 @@ const BLOCKED_PATTERNS = [
   /\bshutdown\b/,
   /\bcurl\b/,          // no arbitrary HTTP — use web_search
   /\bwget\b/,
-  /\bsed\s.*-i/,       // sed inline edit is a write
   /\bgit\s+(push|commit|reset|clean|checkout\s+-f|rebase|merge|stash\s+drop)\b/,
   /\b(node|python|python3|ruby)\s+(-e\b|-c\b)/,  // no eval via interpreters
   /\bsystem_profiler\b(?!\s+SPHardwareDataType\b)/, // bare call dumps gigabytes; subcommand only
