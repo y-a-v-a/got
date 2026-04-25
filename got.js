@@ -3,7 +3,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { execSync } = require('child_process');
-const { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } = require('fs');
+const { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync, renameSync } = require('fs');
 const { join } = require('path');
 const { homedir } = require('os');
 const readline = require('readline');
@@ -235,7 +235,9 @@ async function fetchLocation() {
     clearTimeout(timer);
     const data = await res.json();
     mkdirSync(CACHE_DIR, { recursive: true });
-    writeFileSync(LOCATION_CACHE, JSON.stringify({ timestamp: Date.now(), data }));
+    const tmp = LOCATION_CACHE + '.tmp';
+    writeFileSync(tmp, JSON.stringify({ timestamp: Date.now(), data }));
+    renameSync(tmp, LOCATION_CACHE);
     return data;
   } catch (e) {
     return { error: e.message }; // includes timeout (AbortError) — graceful fallback
@@ -461,7 +463,11 @@ function gatherProjectContext() {
   const context = lines.length ? lines.join('\n') : null;
   log('project_context', { cwd, lines: lines.length });
 
-  try { writeFileSync(cacheFile, JSON.stringify({ timestamp: Date.now(), context })); } catch (e) { log('cache_write_error', { file: cacheFile, error: e.message }); }
+  try {
+    const tmp = cacheFile + '.tmp';
+    writeFileSync(tmp, JSON.stringify({ timestamp: Date.now(), context }));
+    renameSync(tmp, cacheFile);
+  } catch (e) { log('cache_write_error', { file: cacheFile, error: e.message }); }
   return context;
 }
 
