@@ -615,7 +615,7 @@ async function startRepl(client, tools, systemPrompt) {
 
     const query = isFunctionalQuery(input)
       ? `[system query] ${input}`
-      : `got ${input}`;
+      : `got ${input}\n[2 lines. one fact, one dry take.]`;
 
     try {
       // REPL always uses Sonnet — conversational context benefits from the stronger model
@@ -723,11 +723,11 @@ Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
   if (stdinContent) {
     const question = query || 'what is this?';
     const tag = isFunctionalQuery(question) ? '[system query]' : '[piped input]';
-    query = `${tag} ${question}\n\n<stdin>\n${stdinContent}\n</stdin>`;
+    query = `${tag} ${question}\n\n<stdin>\n${stdinContent}\n</stdin>\n[2-3 lines. be sharp.]`;
   } else if (isFunctionalQuery(query)) {
     query = `[system query] ${query}`;
   } else {
-    query = `got ${query}`;
+    query = `got ${query}\n[2 lines. one fact, one dry take.]`;
   }
 
   await runQuery(query, [], client, model, tools, systemPrompt);
