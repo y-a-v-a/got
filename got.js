@@ -571,7 +571,11 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
       results.push({ type: 'tool_result', tool_use_id: call.id, content: String(result) });
     }
     // Voice nudge after tool results — recency reinforcement
-    results.push({ type: 'text', text: '[now respond in max 2 lines. sound like a person, not a newsfeed. end with a wry remark, not a fact.]' });
+    const usedWebSearch = toolCalls.some(c => c.name === 'web_search');
+    const nudge = usedWebSearch
+      ? '[you just read a lot of news. ignore most of it. 2 lines: one detail, one dry remark. you are not a journalist.]'
+      : '[max 2 lines. end with a remark, not a fact.]';
+    results.push({ type: 'text', text: nudge });
     messages.push({ role: 'user', content: results });
   }
 
