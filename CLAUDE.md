@@ -28,6 +28,8 @@ The query is wrapped with "with an ironic or sarcastic twist" UNLESS it matches 
 Commands are validated through:
 - **Allowlist** (`ALLOWED_COMMANDS`) — Only specific binaries permitted
 - **Blocklist** (`BLOCKED_PATTERNS`) — No redirects, no chaining, no sudo, no curl/wget
+- **Git subcommand allowlist** (`GIT_ALLOWED_SUBCOMMANDS`) — Only read-only git operations
+- **Interpreter restriction** (`VERSION_ONLY_COMMANDS`) — node/python/ruby/etc only with --version
 - Pipes between allowed commands are permitted
 - 5-second timeout, 64KB buffer cap, 4KB output truncation
 
@@ -37,7 +39,7 @@ Commands are validated through:
 2. **Read-only by default** — Never writes, modifies, or deletes anything
 3. **Radical brevity with flavor** — 2-3 lines maximum, but never bland
 4. **Smart query interpretation** — "got wit" means BE witty, not define wit. "got shakespeare" delivers a quote, doesn't search Wikipedia.
-5. **Context-aware intelligence** — Model selection (Haiku vs Sonnet) based on query complexity
+5. **Context-aware intelligence** — Sonnet for personality queries, Haiku for system/data queries only
 6. **Location-aware** — Caches IP geolocation for 24h to inform web search
 7. **Simple first** — No config files, no databases, no complexity
 
@@ -46,7 +48,7 @@ Commands are validated through:
 - **Node.js CLI** — Requires Node 18+, uses CommonJS (not ESM)
 - **No dependencies beyond SDK** — Only `@anthropic-ai/sdk` in package.json
 - **Minimal logging** — Opt-in via GOT_LOG=1, logs to ~/.got/got.log as newline-delimited JSON
-- **Prompt composition** — System prompt assembled from prompts/*.md files wrapped in XML tags (`<system_instructions>`, `<personality>`, `<user_context>`) for better parsing
+- **Prompt composition** — System prompt assembled from prompts/*.md files: `<personality>` (SOUL.md) loads first for primacy bias, `<system_instructions>` (SYSTEM_PROMPT.md) second, `<reminder>` voice anchor at end for recency. Post-tool voice nudge reinforces persona after tool results.
 - **Output sanitization** — Strip `<cite>` tags and other markup from responses
 - **Error handling** — User-friendly messages for common errors (401, 429), generic fallback otherwise
 
@@ -55,7 +57,7 @@ Commands are validated through:
 - **Personality is the product** — If changes make responses more bland or "assistant-like", you're going the wrong direction
 - **Safety first** — Never weaken command validation. If adding commands, justify why they're read-only
 - **Token efficiency** — Cap command output (4KB text, 1KB stderr), limit web search to 3 uses
-- **Model routing** — Haiku for simple queries (math, basic commands, greetings), Sonnet for everything else
+- **Model routing** — Sonnet for all personality queries, Haiku only for functional/system queries. Personality requires the stronger model.
 - **Prompt editing** — Changes to personality/capabilities go in prompts/, not hardcoded strings. Use concrete examples in prompts ("got soul" → "Blame it on the boogie") to teach voice.
 - **Output must be plain text** — Strip any markup (`<cite>`, etc.) from final output
 - **Cache strategy** — Location cache is 24h TTL. Don't add more caches without reason
