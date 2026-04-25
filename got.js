@@ -13,7 +13,7 @@ const { createHash } = require('crypto');
 
 const MODEL_SONNET = process.env.GOT_MODEL_SONNET || 'claude-sonnet-4-5-20250929';
 const MODEL_HAIKU  = process.env.GOT_MODEL_HAIKU  || 'claude-haiku-4-5-20251001';
-const MAX_TOKENS = 1024;
+const MAX_TOKENS = 512;
 const CMD_TIMEOUT = 5000;
 const MAX_HISTORY_TURNS = 20; // each turn = user + assistant = 2 entries
 const CACHE_DIR = join(homedir(), '.got');
@@ -571,7 +571,7 @@ async function runQuery(formattedMessage, history, client, model, tools, systemP
       results.push({ type: 'tool_result', tool_use_id: call.id, content: String(result) });
     }
     // Voice nudge after tool results — recency reinforcement
-    results.push({ type: 'text', text: '[Remember: 2-3 lines max. Be yourself, not a search result.]' });
+    results.push({ type: 'text', text: '[2-3 lines MAX. Pick one thing. Be sharp, not thorough.]' });
     messages.push({ role: 'user', content: results });
   }
 
@@ -710,7 +710,7 @@ Override models: GOT_MODEL_SONNET, GOT_MODEL_HAIKU
   }
 
   // Voice anchor at the end of system prompt — recency bias reinforcement
-  systemPrompt += '\n\n<reminder>Stay in character. Dry, brief, opinionated. Not an assistant.</reminder>';
+  systemPrompt += '\n\n<reminder>2-3 lines max. Dry, brief, opinionated. Not an assistant. Not a summarizer.</reminder>';
 
   if (query === 'repl') {
     await startRepl(client, tools, systemPrompt);
